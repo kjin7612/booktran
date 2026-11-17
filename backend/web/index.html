@@ -36,7 +36,7 @@
   #openBar { flex: none; padding: 10px 16px; border-bottom: 1px solid var(--line); }
   #openBtn { width: 100%; padding: 9px 12px; font-weight: 600; }
   #libSection { flex: 1 1 0; min-height: 80px; display: flex; flex-direction: column; min-height: 0; position: relative; }
-  #resetOpened { position: absolute; right: 14px; top: 12px; font-size: 12px; padding: 3px 9px; }
+  #resetOpened { position: absolute; right: 14px; top: 14px; font-size: 12px; padding: 3px 9px; white-space: nowrap; }
   aside.no-files #libSection { flex: none; }
   #noticeBox { flex: none; max-height: 34%; overflow-y: auto; border-top: 1px solid var(--line); padding: 8px 12px; }
   #noticeBox .notice { font-size: 12px; }
@@ -117,7 +117,7 @@
   <div id="splitter" class="hidden" title="드래그해서 목차와 파일 목록의 크기 조절"></div>
   <div id="libSection">
     <h2 id="libToggle" role="button" tabindex="0" title="파일 목록 접기/펴기">▾ 라이브러리</h2>
-    <button id="resetOpened" type="button" class="hidden" title="열었던 파일 목록을 비웁니다">초기화</button>
+    <button id="resetOpened" type="button" title="저장해 둔 책별 읽던 위치를 모두 지우고, 다음에 여는 책은 맨 위에서 시작합니다">목차 이동 초기화</button>
     <div id="folderBox">
       <div id="path"></div>
       <div class="folderRow">
@@ -223,7 +223,6 @@ async function loadFiles() {
     $('path').textContent = `폴더: ${folder.path}`;
     $('folderInput').placeholder = folder.path;
     $('libToggle').textContent = '▾ 라이브러리';
-    $('resetOpened').classList.add('hidden');
     const list = await api('/local/files');
     const ul = $('files');
     ul.innerHTML = '';
@@ -276,7 +275,6 @@ function enterPickerMode() {
   $('path').textContent = '';
   $('files').innerHTML = '';
   $('libToggle').textContent = '▾ 열었던 파일';
-  $('resetOpened').classList.remove('hidden');
   setStatus('');
 }
 
@@ -285,8 +283,11 @@ function setupPicker() {
   const ul = $('files');
   const input = $('pickFile');
   $('openBtn').onclick = () => input.click();
-  // 열었던 파일 목록 비우기(브라우저가 기억하지 않는 목록이라 화면에서만 비운다)
-  $('resetOpened').onclick = () => { ul.innerHTML = ''; };
+  // 목차 이동 초기화: 책별로 저장해 둔 읽던 위치를 모두 지운다(파일 목록은 그대로)
+  $('resetOpened').onclick = () => {
+    try { localStorage.removeItem(POS_KEY); } catch (_) {}
+    setStatus('읽던 위치를 초기화했습니다.');
+  };
   input.onchange = () => {
     const file = input.files[0];
     if (!file) return;
