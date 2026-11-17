@@ -22,6 +22,8 @@
   .folderRow { display: flex; gap: 6px; padding: 0 16px 8px; }
   .folderRow input { flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 6px; }
   .folderRow button { padding: 6px 10px; font-size: 13px; }
+  .notice { margin-top: 10px; font-size: 12px; line-height: 1.6; color: var(--muted); cursor: default; white-space: normal; }
+  .notice em { color: var(--muted); }
   #path { font-size: 12px; color: var(--muted); margin: 0 16px 8px; word-break: break-all; }
   #files { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
   #files li { padding: 10px 16px; border-top: 1px solid var(--line); cursor: pointer; font-size: 14px; word-break: break-all; }
@@ -209,7 +211,17 @@ function enterPickerMode() {
     ul.prepend(row);
     selectFile(item, row);
   };
-  li.append(label, input);
+  const notice = document.createElement('div');
+  notice.className = 'notice';
+  notice.innerHTML = `
+    <strong>이용 안내 (면책 문구 초안)</strong><br>
+    이 도구는 이용자가 <b>본인이 적법하게 소유하거나 이용할 권한이 있는</b> EPUB·PDF 파일을 번역해 보기 위한 보조 도구입니다.
+    업로드하거나 번역하는 자료에 대한 저작권과 이용 권한은 이용자 본인에게 있으며, 권한 없는 자료를 사용하지 마십시오.
+    파일 선택 모드에서는 파일이 서버로 전송되지 않고 이 브라우저 안에서만 처리됩니다.
+    서비스 운영자는 이용자가 업로드한 자료와 번역 결과의 적법성을 보증하지 않으며, 이용자의 권한 없는 이용으로 발생한 저작권 침해 등 분쟁에 대해 책임을 지지 않습니다.
+    번역 결과는 개인 학습·참고 목적으로만 쓰고 재배포하지 마십시오.
+    <em>(초안: 공개 운영 전에 저작권 전문 변호사의 검토가 필요합니다.)</em>`;
+  li.append(label, input, notice);
   ul.appendChild(li);
   setStatus('');
 }
