@@ -446,7 +446,12 @@ async function goToPdfDest(view, dest) {
     if (!explicit || !explicit[0]) return;
     const index = await view.pdf.getPageIndex(explicit[0]);
     const target = view.pages[index];
-    if (target) target.wrap.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    if (target) {
+      // 원본 창(.content) 안에서 그 쪽이 맨 위에 오도록 스크롤을 바로 옮긴다
+      const box = target.wrap.parentElement.getBoundingClientRect();
+      const page = target.wrap.getBoundingClientRect();
+      target.wrap.parentElement.scrollTop += page.top - box.top - 12;
+    }
   } catch (e) {
     setStatus(`링크를 열 수 없습니다: ${e.message}`);
   }
