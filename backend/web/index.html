@@ -33,6 +33,12 @@
   #splitter { flex: none; height: 6px; cursor: ns-resize; background: var(--line); touch-action: none; }
   #splitter:hover { background: var(--accent); }
   aside.no-files #tocBox { flex: 1 1 0; }
+  #openBar { flex: none; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  #openBtn { width: 100%; padding: 9px 12px; font-weight: 600; }
+  #libSection { flex: 1 1 0; min-height: 80px; display: flex; flex-direction: column; min-height: 0; }
+  aside.no-files #libSection { flex: none; }
+  #noticeBox { flex: none; max-height: 34%; overflow-y: auto; border-top: 1px solid var(--line); padding: 8px 12px; }
+  #noticeBox .notice { font-size: 12px; }
   #tocBox .tocHead { cursor: pointer; user-select: none; }
   /* 목차를 접으면 머리글만 남고, 파일 목록이 나머지 공간을 쓴다 */
   aside.toc-collapsed #tocBox { flex: none; min-height: 0; overflow: visible; }
@@ -94,20 +100,28 @@
 </head>
 <body>
 <aside>
-  <h2 id="libToggle" role="button" tabindex="0" title="파일 목록 접기/펴기">▾ 라이브러리</h2>
-  <div id="folderBox">
-    <div id="path"></div>
-    <div class="folderRow">
-      <input id="folderInput" placeholder="예: D:\books 또는 \\NAS\books">
-      <button id="folderBtn">폴더 변경</button>
-    </div>
+  <!-- 위에서 아래 순서: 파일 열기(고정) → 목차 → 열었던 파일 목록 → 이용 안내(고정) -->
+  <div id="openBar">
+    <button id="openBtn" type="button">📂 파일 열기</button>
+    <input type="file" id="pickFile" hidden accept=".epub,.pdf,.txt,application/epub+zip,application/pdf,text/plain">
   </div>
   <div id="tocBox" class="hidden">
     <div class="tocHead" id="tocToggle" role="button" tabindex="0" title="목차 접기/펴기">▾ 목차</div>
     <ul id="toc"></ul>
   </div>
   <div id="splitter" class="hidden" title="드래그해서 목차와 파일 목록의 크기 조절"></div>
-  <ul id="files"></ul>
+  <div id="libSection">
+    <h2 id="libToggle" role="button" tabindex="0" title="파일 목록 접기/펴기">▾ 라이브러리</h2>
+    <div id="folderBox">
+      <div id="path"></div>
+      <div class="folderRow">
+        <input id="folderInput" placeholder="예: D:\books 또는 \\NAS\books">
+        <button id="folderBtn">폴더 변경</button>
+      </div>
+    </div>
+    <ul id="files"></ul>
+  </div>
+  <div id="noticeBox"></div>
 </aside>
 <main>
   <header>
@@ -220,17 +234,15 @@ function enterPickerMode() {
   state.serverMode = false;
   $('folderBox').classList.add('hidden');
   $('path').textContent = '';
+  $('files').innerHTML = '';
+  setStatus('');
+}
+
+// 파일 열기 버튼(상단 고정)과 파일 선택칸을 연결한다. 고른 파일은 목록 맨 위에 추가된다.
+function setupPicker() {
   const ul = $('files');
-  ul.innerHTML = '';
-  const li = document.createElement('li');
-  li.style.cursor = 'default';
-  const label = document.createElement('div');
-  label.textContent = '내 PC의 EPUB/PDF 파일을 고르세요';
-  label.className = 'meta';
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.epub,.pdf,.txt,application/epub+zip,application/pdf,text/plain';
-  input.style.marginTop = '8px';
+  const input = $('pickFile');
+  $('openBtn').onclick = () => input.click();
   input.onchange = () => {
     const file = input.files[0];
     if (!file) return;
@@ -252,9 +264,12 @@ function enterPickerMode() {
     ul.prepend(row);
     selectFile(item, row);
   };
+}
+
+// 이용 안내: 사이드바 맨 아래에 항상 보인다. 브라우저 언어에 맞는 문구를 보여 준다(ko, en, ja, zh, fr, de, es).
+function renderNotice() {
   const notice = document.createElement('div');
   notice.className = 'notice';
-  // 브라우저 언어에 맞는 안내 문구를 보여 준다(ko, en, ja, zh, fr, de, es).
   const koHtml = `
     <strong>이용 안내</strong><br>
     이 도구는 이용자가 <b>본인이 적법하게 소유하거나 이용할 권한이 있는</b> EPUB·PDF 파일을 번역해 보기 위한 보조 도구입니다.
@@ -342,10 +357,12 @@ function enterPickerMode() {
   };
   notice.innerHTML = '';
   notice.append(head, keyEl, body);
-  li.append(label, input, notice);
-  ul.appendChild(li);
-  setStatus('');
+  $('noticeBox').replaceChildren(notice);
 }
+
+// 파일 열기 버튼과 이용 안내는 서버 여부와 관계없이 항상 준비한다.
+setupPicker();
+renderNotice();
 
 function clearViews() {
   for (const key of Object.keys(state.views)) dropView(key);
@@ -392,7 +409,7 @@ async function selectFile(item, li) {
   await openOriginal();
   buildToc();
   if (item.translated) await openTranslated();
-  else showMessage('paneTrans', '아직 번역되지 않았습니다. "번역 시작"(Gemini 키 필요) 또는 "번역"을 누르세요.');
+  else showMessage('paneTrans', '아직 번역되지 않았습니다.');
   applyMode();
   resetPaneScroll();
 }
