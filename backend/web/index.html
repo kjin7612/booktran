@@ -948,11 +948,24 @@ function restorePos(item) {
   }, 400);
 }
 
+// 원본 창의 스크롤 위치를 0~1 비율로 읽고 쓴다(창 크기가 바뀌어도 같은 자리에 맞추려고 쓴다)
+function scrollRatio() {
+  const c = origContent();
+  const range = c.scrollHeight - c.clientHeight;
+  return range > 0 ? c.scrollTop / range : 0;
+}
+
+function setScrollRatio(ratio) {
+  const c = origContent();
+  const range = c.scrollHeight - c.clientHeight;
+  if (range > 0) c.scrollTop = ratio * range;
+}
+
 function attachPosSave() {
   let timer = null;
   origContent().addEventListener('scroll', () => {
     clearTimeout(timer);
-    timer = setTimeout(savePos, 500);
+    timer = setTimeout(() => { if (!state.resizing) savePos(); }, 500);
   }, { passive: true });
   window.addEventListener('pagehide', savePos);
   // 스크롤할 때 PDF 쪽 번호를 갱신한다
@@ -1418,7 +1431,10 @@ window.addEventListener('resize', () => {
   resizeTimer = setTimeout(() => {
     if (!state.item || isEpub()) { applyMode(); return; }
     (async () => {
+      // 다시 그리기 전에 지금 위치를 기억해 두었다가, 끝난 뒤 같은 위치로 돌려놓는다
       const wasBrowser = state.transMode === 'browser';
+      const ratio = scrollRatio();
+      state.resizing = true; // 다시 그리는 동안 위치(0)가 저장되지 않게 막는다
       clearViews();
       await openOriginal();
       if (wasBrowser) {
@@ -1427,6 +1443,8 @@ window.addEventListener('resize', () => {
         await openTranslated();
       }
       applyMode();
+      setScrollRatio(ratio);
+      state.resizing = false;
     })();
   }, 400);
 });
