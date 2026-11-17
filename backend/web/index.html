@@ -81,7 +81,7 @@
     <button id="sideBtn" title="라이브러리 패널 접기/펴기">☰</button>
     <span id="title">파일을 선택하세요</span>
     <button id="translateBtn" class="primary hidden">번역 시작</button>
-    <button id="browserBtn" class="hidden" title="API 키 없이 브라우저 내장 번역(Chrome 138 이상)을 사용합니다">브라우저 번역 (키 불필요)</button>
+    <button id="browserBtn" class="hidden" title="API 키 없이 브라우저 내장 번역(Chrome 138 이상)을 사용합니다">번역</button>
     <select id="srcLang" class="hidden" title="원문 언어">
       <option value="en">원문: 영어</option>
       <option value="ja">원문: 일본어</option>
@@ -324,7 +324,7 @@ async function selectFile(item, li) {
 
   await openOriginal();
   if (item.translated) await openTranslated();
-  else showMessage('paneTrans', '아직 번역되지 않았습니다. "번역 시작"(Gemini 키 필요) 또는 "브라우저 번역(키 불필요)"을 누르세요.');
+  else showMessage('paneTrans', '아직 번역되지 않았습니다. "번역 시작"(Gemini 키 필요) 또는 "번역"을 누르세요.');
   applyMode();
 }
 
@@ -679,7 +679,7 @@ async function startBrowserView() {
     const chapters = state.browser.epub.chapters;
     state.views.trans = { kind: 'browser', content, chapters, count: chapters.length, shown: -1 };
     showChapter(state.chapter);
-    setStatus('브라우저 번역 (키 불필요)');
+    setStatus('번역 (브라우저 내장)');
     return;
   }
 
@@ -709,7 +709,7 @@ async function startBrowserView() {
   }, { root: content, rootMargin: '400px 0px' });
   content.querySelectorAll('.bpage').forEach((el) => io.observe(el));
   view.observer = io;
-  setStatus('브라우저 번역 (키 불필요)');
+  setStatus('번역 (브라우저 내장)');
 }
 
 $('browserBtn').onclick = async () => {
