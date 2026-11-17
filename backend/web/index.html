@@ -55,6 +55,10 @@
   #files { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
   #files li { padding: 10px 16px; border-top: 1px solid var(--line); cursor: pointer; font-size: 14px; word-break: break-all; }
   #files li:hover { background: var(--bg); }
+  #files li { position: relative; padding-right: 34px; }
+  #files .hideBtn { position: absolute; right: 8px; top: 8px; background: none; border: none; padding: 2px 6px; color: var(--muted); font-size: 13px; }
+  #files .hideBtn:hover { color: var(--text); }
+  #files li.restoreRow { color: var(--accent); font-size: 13px; padding-right: 16px; }
   #files li.active { background: var(--bg); box-shadow: inset 3px 0 0 var(--accent); }
   #files .meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
   .badge { font-size: 11px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); margin-left: 4px; }
@@ -196,6 +200,21 @@ async function api(url, options) {
 
 function setStatus(text) { $('status').textContent = text || ''; }
 
+// 목록에서 제외한 항목. 파일은 지우지 않고, 이 브라우저의 목록에서만 숨긴다.
+function readHidden() {
+  try { return JSON.parse(localStorage.getItem('hiddenFiles') || '[]'); } catch (_) { return []; }
+}
+function writeHidden(list) {
+  try { localStorage.setItem('hiddenFiles', JSON.stringify(list)); } catch (_) {}
+}
+function hideKey(item) { return `${item.name}|${item.size}`; }
+function hideItem(item) {
+  const list = readHidden();
+  if (!list.includes(hideKey(item))) list.push(hideKey(item));
+  writeHidden(list);
+  loadFiles();
+}
+
 async function loadFiles() {
   try {
     const folder = await api('/local/folder');
@@ -205,7 +224,10 @@ async function loadFiles() {
     const ul = $('files');
     ul.innerHTML = '';
     if (list.length === 0) setStatus('EPUB/PDF 파일이 없습니다.');
-    for (const item of list) {
+    const hidden = readHidden();
+    const visible = list.filter((i) => !hidden.includes(hideKey(i)));
+    const hiddenCount = list.length - visible.length;
+    for (const item of visible) {
       const li = document.createElement('li');
       li.dataset.name = item.name;
       const name = document.createElement('div');
@@ -220,8 +242,22 @@ async function loadFiles() {
         meta.appendChild(b);
       }
       li.append(name, meta);
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.className = 'hideBtn';
+      x.textContent = '✕';
+      x.title = '목록에서 제외합니다(파일은 지우지 않습니다)';
+      x.onclick = (e) => { e.stopPropagation(); hideItem(item); };
+      li.appendChild(x);
       li.onclick = () => selectFile(item, li);
       ul.appendChild(li);
+    }
+    if (hiddenCount > 0) {
+      const row = document.createElement('li');
+      row.className = 'restoreRow';
+      row.textContent = `제외한 항목 ${hiddenCount}개 다시 보기`;
+      row.onclick = () => { writeHidden([]); loadFiles(); };
+      ul.appendChild(row);
     }
   } catch (e) {
     enterPickerMode();
