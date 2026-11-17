@@ -656,8 +656,9 @@ function buildToc() {
   }
   const view = state.views.orig;
   if (!view || !view.pdf) return;
-  view.pdf.getOutline().then((outline) => {
-    if (!outline) return renderToc([]);
+  view.pdf.getOutline().then(async (outline) => {
+    // 북마크가 없으면 본문 앞의 인쇄된 목차(Contents)를 읽어 만든다
+    if (!outline || outline.length === 0) return renderToc(await buildPrintedToc(view));
     const flat = [];
     const walk = (list, depth) => {
       for (const node of list) {
@@ -668,6 +669,66 @@ function buildToc() {
     walk(outline, 0);
     renderToc(flat);
   }).catch(() => renderToc([]));
+}
+
+// 쪽 번호로 바로 이동(목차 항목용). 원본 창 안에서 그 쪽이 맨 위에 오게 한다.
+function scrollToPdfPage(view, index) {
+  const target = view.pages[index];
+  if (!target) return;
+  const c = target.wrap.parentElement;
+  const box = c.getBoundingClientRect();
+  c.scrollTop += target.wrap.getBoundingClientRect().top - box.top - 12;
+}
+
+// 북마크가 없는 PDF용 목차: 앞쪽의 'Contents' 쪽을 읽고, 각 제목을 본문에서 같은 순서로 찾는다.
+// 찾지 못한 제목은 뺀다. 쪽 번호가 적힌 목차 줄은 번호를 떼고 제목만 쓴다.
+async function buildPrintedToc(view) {
+  const pdf = view.pdf;
+  const cache = new Map();
+  const linesOf = async (i) => {
+    if (!cache.has(i)) {
+      const tc = await (await pdf.getPage(i + 1)).getTextContent();
+      const text = tc.items.map((it) => it.str + (it.hasEOL ? '\n' : '')).join('');
+      cache.set(i, text.split('\n').map((s) => s.replace(/\s+/g, ' ').trim()).filter(Boolean));
+    }
+    return cache.get(i);
+  };
+  const isHead = (l) => /^(contents|table of contents|목차)$/i.test(l);
+  const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
+  // 1) 목차 쪽: 앞 20쪽 안에서 'Contents' 머리글이 있는 쪽
+  let tocPage = -1;
+  for (let i = 0; i < Math.min(20, pdf.numPages); i++) {
+    if ((await linesOf(i)).some(isHead)) { tocPage = i; break; }
+  }
+  if (tocPage < 0) return [];
+
+  // 2) 목차 줄 모으기: 머리글 다음 줄부터, 점선과 쪽 번호는 뗀다
+  const titles = [];
+  let started = false;
+  for (const line of await linesOf(tocPage)) {
+    if (!started) { started = isHead(line); continue; }
+    const title = line.replace(/\s*\.{2,}\s*\d*\s*$/, '').trim();
+    if (title && /\p{L}/u.test(title)) titles.push(title);
+  }
+
+  // 3) 본문에서 순서대로 찾기(앞에서 찾은 쪽 뒤에서만 찾는다)
+  const result = [];
+  let cursor = tocPage + 1;
+  for (const title of titles) {
+    const want = norm(title);
+    if (!want) continue;
+    for (let i = cursor; i < pdf.numPages && i <= cursor + 60; i++) {
+      if ((await linesOf(i)).some((l) => norm(l) === want)) {
+        const m = title.match(/^(\d+(?:\.\d+)*)/);
+        const depth = m ? m[1].split('.').length - 1 : 0;
+        result.push({ title, depth, pick: () => scrollToPdfPage(view, i) });
+        cursor = i;
+        break;
+      }
+    }
+  }
+  return result;
 }
 
 // EPUB 목차: nav 문서(EPUB3)를 우선 읽고, 없으면 toc.ncx(EPUB2)를 읽는다.
