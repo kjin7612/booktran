@@ -66,7 +66,9 @@
   .group button:last-child { border-radius: 0 6px 6px 0; }
   #panes { flex: 1; display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }
   #panes.single { grid-template-columns: 1fr; }
-  :root { --pane-bg: #ffffff; --pane-fg: #1d1d1b; }  /* 사용자가 고르는 보기 바탕색과 글자색 */
+  /* 원본 창과 번역 창 각각의 기본 바탕색과 글자색(사용자가 바꿀 수 있다) */
+  #paneOrig { --pane-bg: #ffffff; --pane-fg: #1d1d1b; }
+  #paneTrans { --pane-bg: #000000; --pane-fg: #c9c9c9; }
   .pane { position: relative; min-width: 0; min-height: 0; border-right: 1px solid var(--line); background: var(--pane-bg); color: var(--pane-fg); }
   .pane:last-child { border-right: none; }
   .pane .label { position: absolute; top: 6px; left: 10px; z-index: 2; font-size: 11px; background: var(--panel); color: var(--muted); padding: 2px 6px; border-radius: 4px; }
@@ -131,8 +133,10 @@
       <option value="es">번역: 스페인어</option>
     </select>
     <span class="colorBox" title="보기 화면의 글자색과 바탕색">
-      <label>글자 <input type="color" id="fgColor" value="#1d1d1b"></label>
-      <label>바탕 <input type="color" id="bgColor" value="#ffffff"></label>
+      <label>원본 글자 <input type="color" id="origFg" value="#1d1d1b"></label>
+      <label>바탕 <input type="color" id="origBg" value="#ffffff"></label>
+      <label>번역 글자 <input type="color" id="transFg" value="#c9c9c9"></label>
+      <label>바탕 <input type="color" id="transBg" value="#000000"></label>
       <button id="colorReset" type="button">기본</button>
     </span>
     <span id="status"></span>
@@ -410,7 +414,7 @@ async function openEpub(key, src, paneId) {
   content.innerHTML = '';
   const book = ePub(typeof src === 'string' ? src : src.slice(0));
   const rendition = book.renderTo(content, { width: '100%', height: '100%', flow: 'scrolled-doc' });
-  applyEpubColors(rendition);
+  applyEpubColors(key, rendition);
   await book.ready;
   state.views[key] = { kind: 'epub', book, rendition, count: book.spine.length, content };
 }
@@ -704,39 +708,50 @@ async function openTranslated() {
 // 사용자가 고른 색은 브라우저에 저장된다. EPUB 본문은 책 자체의 CSS가 색을 정하므로,
 // epub.js의 테마 재정의로 글자색과 바탕색을 덮어쓴다.
 
-const DEFAULT_COLORS = { fg: '#1d1d1b', bg: '#ffffff' };
+// 원본(orig)과 번역(trans)을 따로 설정한다. 번역 쪽 기본값은 검은 바탕에 밝은 회색 글자(201, 201, 201).
+const PANE_DEFAULTS = {
+  orig: { fg: '#1d1d1b', bg: '#ffffff' },
+  trans: { fg: '#c9c9c9', bg: '#000000' },
+};
 
-function applyEpubColors(rendition) {
+function applyEpubColors(key, rendition) {
+  const c = state.colors[key];
   try {
-    rendition.themes.override('color', state.colors.fg);
-    rendition.themes.override('background', state.colors.bg);
+    rendition.themes.override('color', c.fg);
+    rendition.themes.override('background', c.bg);
   } catch (_) {}
 }
 
-function applyColors(fg, bg, save = true) {
-  state.colors = { fg, bg };
-  document.documentElement.style.setProperty('--pane-fg', fg);
-  document.documentElement.style.setProperty('--pane-bg', bg);
-  $('fgColor').value = fg;
-  $('bgColor').value = bg;
-  for (const v of Object.values(state.views)) {
-    if (v.kind === 'epub' && v.rendition) applyEpubColors(v.rendition);
+function applyPaneColors(key, fg, bg, save = true) {
+  state.colors[key] = { fg, bg };
+  const pane = $(key === 'orig' ? 'paneOrig' : 'paneTrans');
+  pane.style.setProperty('--pane-fg', fg);
+  pane.style.setProperty('--pane-bg', bg);
+  $(`${key}Fg`).value = fg;
+  $(`${key}Bg`).value = bg;
+  for (const [name, v] of Object.entries(state.views)) {
+    if (v.kind === 'epub' && v.rendition) applyEpubColors(name, v.rendition);
   }
   if (save) {
-    try { localStorage.setItem('paneColors', JSON.stringify(state.colors)); } catch (_) {}
+    try { localStorage.setItem('paneColors2', JSON.stringify(state.colors)); } catch (_) {}
   }
 }
 
-state.colors = { ...DEFAULT_COLORS };
+state.colors = { orig: { ...PANE_DEFAULTS.orig }, trans: { ...PANE_DEFAULTS.trans } };
 try {
-  const saved = JSON.parse(localStorage.getItem('paneColors') || 'null');
-  if (saved && saved.fg && saved.bg) state.colors = saved;
+  const saved = JSON.parse(localStorage.getItem('paneColors2') || 'null');
+  for (const key of ['orig', 'trans']) {
+    if (saved && saved[key] && saved[key].fg && saved[key].bg) state.colors[key] = saved[key];
+  }
 } catch (_) {}
-applyColors(state.colors.fg, state.colors.bg, false);
-
-$('fgColor').oninput = (e) => applyColors(e.target.value, state.colors.bg);
-$('bgColor').oninput = (e) => applyColors(state.colors.fg, e.target.value);
-$('colorReset').onclick = () => applyColors(DEFAULT_COLORS.fg, DEFAULT_COLORS.bg);
+for (const key of ['orig', 'trans']) {
+  applyPaneColors(key, state.colors[key].fg, state.colors[key].bg, false);
+  $(`${key}Fg`).oninput = (e) => applyPaneColors(key, e.target.value, state.colors[key].bg);
+  $(`${key}Bg`).oninput = (e) => applyPaneColors(key, state.colors[key].fg, e.target.value);
+}
+$('colorReset').onclick = () => {
+  for (const key of ['orig', 'trans']) applyPaneColors(key, PANE_DEFAULTS[key].fg, PANE_DEFAULTS[key].bg);
+};
 
 // 파일을 열면 두 창 모두 맨 위에서 시작한다(이전 파일의 스크롤 위치를 이어받지 않게)
 function resetPaneScroll() {
