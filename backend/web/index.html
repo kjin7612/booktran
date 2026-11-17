@@ -1,0 +1,808 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Book_Tran</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root { --bg: #f7f7f5; --panel: #ffffff; --line: #e2e2dd; --text: #1d1d1b; --muted: #77776f; --accent: #5b5bd6; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #161616; --panel: #1f1f1f; --line: #333; --text: #ececec; --muted: #9a9a92; --accent: #8c8cf0; }
+  }
+  :root[data-theme="dark"] { --bg: #161616; --panel: #1f1f1f; --line: #333; --text: #ececec; --muted: #9a9a92; --accent: #8c8cf0; }
+  * { box-sizing: border-box; }
+  body { margin: 0; height: 100vh; display: flex; background: var(--bg); color: var(--text); font-family: "Malgun Gothic", "Segoe UI", sans-serif; }
+  aside { width: 280px; border-right: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; }
+  aside.closed { display: none; }
+  aside h2 { font-size: 15px; margin: 16px; cursor: pointer; user-select: none; }
+  #folderBox { padding-bottom: 6px; }
+  .folderRow { display: flex; gap: 6px; padding: 0 16px 8px; }
+  .folderRow input { flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 6px; }
+  .folderRow button { padding: 6px 10px; font-size: 13px; }
+  #path { font-size: 12px; color: var(--muted); margin: 0 16px 8px; word-break: break-all; }
+  #files { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
+  #files li { padding: 10px 16px; border-top: 1px solid var(--line); cursor: pointer; font-size: 14px; word-break: break-all; }
+  #files li:hover { background: var(--bg); }
+  #files li.active { background: var(--bg); box-shadow: inset 3px 0 0 var(--accent); }
+  #files .meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .badge { font-size: 11px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); margin-left: 4px; }
+  main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+  #title { font-weight: 600; margin-right: auto; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  button { font: inherit; padding: 6px 12px; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 6px; cursor: pointer; }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #status { font-size: 13px; color: var(--muted); }
+  .group { display: flex; gap: 0; }
+  .group button { border-radius: 0; }
+  .group button:first-child { border-radius: 6px 0 0 6px; }
+  .group button:last-child { border-radius: 0 6px 6px 0; }
+  #panes { flex: 1; display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }
+  #panes.single { grid-template-columns: 1fr; }
+  .pane { position: relative; min-width: 0; min-height: 0; border-right: 1px solid var(--line); background: #fff; }
+  .pane:last-child { border-right: none; }
+  .pane .label { position: absolute; top: 6px; left: 10px; z-index: 2; font-size: 11px; background: var(--panel); color: var(--muted); padding: 2px 6px; border-radius: 4px; }
+  .pane .content { height: 100%; overflow: auto; }
+  .pane .empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--muted); padding: 24px; text-align: center; }
+  .pdf-page { position: relative; margin: 12px auto; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+  .pdf-page canvas { display: block; }
+  /* pdf.js 텍스트 레이어: 캔버스 위에 투명한 글자를 올려 드래그 선택과 복사를 가능하게 한다 */
+  .textLayer { position: absolute; left: 0; top: 0; right: 0; bottom: 0; overflow: hidden; line-height: 1; }
+  .textLayer > span { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; }
+  .textLayer ::selection { background: rgba(91, 91, 214, 0.35); }
+  .hidden { display: none !important; }
+  select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 6px; }
+  .bpara { margin: 0 0 0.8em; line-height: 1.6; color: var(--text); }
+  .bpage { margin: 12px auto; padding: 18px 22px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow-y: auto; font-size: 15px; }
+  .bpage .pno { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .bpara.pending { color: var(--muted); }
+</style>
+</head>
+<body>
+<aside>
+  <h2 id="libToggle" role="button" tabindex="0" title="파일 목록 접기/펴기">▾ 라이브러리</h2>
+  <div id="folderBox">
+    <div id="path"></div>
+    <div class="folderRow">
+      <input id="folderInput" placeholder="예: D:\books 또는 \\NAS\books">
+      <button id="folderBtn">폴더 변경</button>
+    </div>
+  </div>
+  <ul id="files"></ul>
+</aside>
+<main>
+  <header>
+    <button id="sideBtn" title="라이브러리 패널 접기/펴기">☰</button>
+    <span id="title">파일을 선택하세요</span>
+    <button id="translateBtn" class="primary hidden">번역 시작</button>
+    <button id="browserBtn" class="hidden" title="API 키 없이 브라우저 내장 번역(Chrome 138 이상)을 사용합니다">브라우저 번역 (키 불필요)</button>
+    <select id="srcLang" class="hidden" title="원문 언어">
+      <option value="en">영어 → 한국어</option>
+      <option value="ja">일본어 → 한국어</option>
+      <option value="zh">중국어 → 한국어</option>
+      <option value="fr">프랑스어 → 한국어</option>
+      <option value="de">독일어 → 한국어</option>
+      <option value="es">스페인어 → 한국어</option>
+    </select>
+    <span id="status"></span>
+    <div class="group hidden" id="modes">
+      <button data-mode="original">원본</button>
+      <button data-mode="translated">번역</button>
+      <button data-mode="side">나란히</button>
+    </div>
+    <div class="group hidden" id="nav">
+      <button id="prev">이전 장</button>
+      <button id="next">다음 장</button>
+    </div>
+    <span id="chapter" class="hidden"></span>
+  </header>
+  <section id="panes">
+    <div class="pane" id="paneOrig"><span class="label">원본</span><div class="content"></div></div>
+    <div class="pane" id="paneTrans"><span class="label">번역</span><div class="content"></div></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+const state = {
+  serverMode: true,    // 로컬 백엔드가 있으면 true, 없으면 브라우저에서 고른 파일만 연다
+  item: null,          // 선택한 파일 {name, format, doc_id, translated, local?}
+  mode: 'side',
+  chapter: 0,
+  views: {},           // 'orig' | 'trans' -> {kind: 'epub'|'pdf', ...}
+  pollTimer: null,
+  syncing: false,
+};
+
+async function api(url, options) {
+  const res = await fetch(url, options);
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  return res.json();
+}
+
+function setStatus(text) { $('status').textContent = text || ''; }
+
+async function loadFiles() {
+  try {
+    const folder = await api('/local/folder');
+    $('path').textContent = `폴더: ${folder.path}`;
+    $('folderInput').placeholder = folder.path;
+    const list = await api('/local/files');
+    const ul = $('files');
+    ul.innerHTML = '';
+    if (list.length === 0) setStatus('EPUB/PDF 파일이 없습니다.');
+    for (const item of list) {
+      const li = document.createElement('li');
+      li.dataset.name = item.name;
+      const name = document.createElement('div');
+      name.textContent = item.name;
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = `${item.format.toUpperCase()} · ${(item.size / 1024 / 1024).toFixed(1)} MB`;
+      if (item.translated) {
+        const b = document.createElement('span');
+        b.className = 'badge';
+        b.textContent = '번역됨';
+        meta.appendChild(b);
+      }
+      li.append(name, meta);
+      li.onclick = () => selectFile(item, li);
+      ul.appendChild(li);
+    }
+  } catch (e) {
+    enterPickerMode();
+  }
+}
+
+// 서버(로컬 백엔드)가 없으면 브라우저에서 파일을 직접 고르는 모드로 바꾼다.
+// 이때 파일은 서버로 올라가지 않고 이 브라우저 안에서만 열린다.
+function enterPickerMode() {
+  state.serverMode = false;
+  $('folderBox').classList.add('hidden');
+  $('path').textContent = '';
+  const ul = $('files');
+  ul.innerHTML = '';
+  const li = document.createElement('li');
+  li.style.cursor = 'default';
+  const label = document.createElement('div');
+  label.textContent = '내 PC의 EPUB/PDF 파일을 고르세요';
+  label.className = 'meta';
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.epub,.pdf,application/epub+zip,application/pdf';
+  input.style.marginTop = '8px';
+  input.onchange = () => {
+    const file = input.files[0];
+    if (!file) return;
+    const lower = file.name.toLowerCase();
+    if (!lower.endsWith('.epub') && !lower.endsWith('.pdf')) { setStatus('EPUB 또는 PDF 파일만 열 수 있습니다.'); return; }
+    const item = {
+      name: file.name,
+      format: lower.endsWith('.epub') ? 'epub' : 'pdf',
+      size: file.size,
+      local: file,
+      translated: false,
+    };
+    const row = document.createElement('li');
+    const name = document.createElement('div');
+    name.textContent = file.name;
+    row.append(name);
+    row.onclick = () => selectFile(item, row);
+    ul.prepend(row);
+    selectFile(item, row);
+  };
+  li.append(label, input);
+  ul.appendChild(li);
+  setStatus('');
+}
+
+function clearViews() {
+  for (const key of Object.keys(state.views)) dropView(key);
+  state.views = {};
+  document.querySelectorAll('#panes .content').forEach((el) => { el.innerHTML = ''; el.onscroll = null; });
+}
+
+function dropView(key) {
+  const v = state.views[key];
+  if (!v) return;
+  try { if (v.rendition) v.rendition.destroy(); } catch (_) {}
+  try { if (v.book) v.book.destroy(); } catch (_) {}
+  try { if (v.pdf) v.pdf.destroy(); } catch (_) {}
+  if (v.observer) v.observer.disconnect();
+  if (v.content) v.content.onscroll = null;
+  delete state.views[key];
+}
+
+function isEpub() { return state.item && state.item.format === 'epub'; }
+
+async function selectFile(item, li) {
+  document.querySelectorAll('#files li').forEach((el) => el.classList.remove('active'));
+  li.classList.add('active');
+  stopPolling();
+  clearViews();
+  state.item = item;
+  state.chapter = 0;
+  $('title').textContent = item.name;
+  setStatus('');
+
+  state.transMode = 'server';
+  // 서버 번역은 로컬 백엔드가 있고 서버 파일일 때만 쓸 수 있다.
+  $('translateBtn').classList.toggle('hidden', !state.serverMode || !!item.local);
+  $('translateBtn').disabled = false;
+  $('browserBtn').classList.remove('hidden');
+  $('browserBtn').disabled = false;
+  $('srcLang').classList.remove('hidden');
+  $('modes').classList.remove('hidden');
+  // 장 이동은 EPUB 전용. PDF는 스크롤로 넘긴다.
+  $('nav').classList.toggle('hidden', !isEpub());
+  $('chapter').classList.toggle('hidden', !isEpub());
+
+  await openOriginal();
+  if (item.translated) await openTranslated();
+  else showMessage('paneTrans', '아직 번역되지 않았습니다. "번역 시작"(Gemini 키 필요) 또는 "브라우저 번역(키 불필요)"을 누르세요.');
+  applyMode();
+}
+
+function showMessage(paneId, text) {
+  const content = $(paneId).querySelector('.content');
+  content.innerHTML = '';
+  if (!text) return;
+  const div = document.createElement('div');
+  div.className = 'empty';
+  div.textContent = text;
+  content.appendChild(div);
+}
+
+// ---------------- EPUB (epub.js)
+
+async function openEpub(key, src, paneId) {
+  const content = $(paneId).querySelector('.content');
+  content.innerHTML = '';
+  const book = ePub(typeof src === 'string' ? src : src.slice(0));
+  const rendition = book.renderTo(content, { width: '100%', height: '100%', flow: 'scrolled-doc' });
+  await book.ready;
+  state.views[key] = { kind: 'epub', book, rendition, count: book.spine.length, content };
+}
+
+// ---------------- PDF (pdf.js)
+
+async function openPdf(key, src, paneId) {
+  const content = $(paneId).querySelector('.content');
+  content.innerHTML = '';
+  const doc = await pdfjsLib.getDocument(typeof src === 'string' ? src : { data: src.slice(0) }).promise;
+  const view = { kind: 'pdf', pdf: doc, content, count: doc.numPages, pages: [] };
+  state.views[key] = view;
+
+  const width = Math.max(320, content.clientWidth - 32);
+  const first = await doc.getPage(1);
+  const base = first.getViewport({ scale: 1 });
+  const scale = width / base.width;
+
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      const p = view.pages[Number(e.target.dataset.index)];
+      if (p && !p.rendered) { p.rendered = true; renderPdfPage(doc, p, scale); }
+    }
+  }, { root: content, rootMargin: '600px 0px' });
+
+  for (let i = 0; i < doc.numPages; i++) {
+    const wrap = document.createElement('div');
+    wrap.className = 'pdf-page';
+    wrap.dataset.index = String(i);
+    wrap.style.width = `${base.width * scale}px`;
+    wrap.style.height = `${base.height * scale}px`;
+    content.appendChild(wrap);
+    view.pages.push({ num: i + 1, wrap, rendered: false });
+    io.observe(wrap);
+  }
+  view.observer = io;
+}
+
+async function renderPdfPage(doc, p, scale) {
+  const page = await doc.getPage(p.num);
+  const vp = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.floor(vp.width);
+  canvas.height = Math.floor(vp.height);
+  p.wrap.style.width = `${vp.width}px`;
+  p.wrap.style.height = `${vp.height}px`;
+  p.wrap.innerHTML = '';
+  p.wrap.appendChild(canvas);
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+
+  // 글자 선택용 텍스트 레이어
+  const textDiv = document.createElement('div');
+  textDiv.className = 'textLayer';
+  textDiv.style.width = `${vp.width}px`;
+  textDiv.style.height = `${vp.height}px`;
+  p.wrap.appendChild(textDiv);
+  const textContent = await page.getTextContent();
+  await pdfjsLib.renderTextLayer({ textContentSource: textContent, container: textDiv, viewport: vp, textDivs: [] }).promise;
+}
+
+// ---------------- 공통 열기
+
+// 서버 파일이면 URL, 브라우저에서 고른 파일이면 ArrayBuffer를 돌려준다.
+async function srcOf(item) {
+  if (item.local) {
+    if (!item.bytes) item.bytes = await item.local.arrayBuffer();
+    return item.bytes;
+  }
+  return `/local/file?name=${encodeURIComponent(item.name)}`;
+}
+
+async function openOriginal() {
+  try {
+    const src = await srcOf(state.item);
+    if (isEpub()) await openEpub('orig', src, 'paneOrig');
+    else await openPdf('orig', src, 'paneOrig');
+  } catch (e) {
+    showMessage('paneOrig', `원본을 열 수 없습니다: ${e.message}`);
+  }
+}
+
+async function openTranslated() {
+  try {
+    const url = `/documents/${state.item.doc_id}/translated?lang=ko`;
+    if (isEpub()) await openEpub('trans', url, 'paneTrans');
+    else await openPdf('trans', url, 'paneTrans');
+  } catch (e) {
+    showMessage('paneTrans', `번역본을 열 수 없습니다: ${e.message}`);
+  }
+}
+
+// ---------------- 장 이동 (EPUB)
+
+function showChapter(index) {
+  const views = Object.values(state.views).filter((v) => v.kind === 'epub');
+  const browser = state.transMode === 'browser' && state.views.trans && state.views.trans.kind === 'browser'
+    ? state.views.trans : null;
+  if (views.length === 0 && !browser) return;
+  const total = Math.max(0, ...views.map((v) => v.count), browser ? browser.count : 0);
+  if (total === 0) return;
+  state.chapter = Math.min(Math.max(index, 0), total - 1);
+  for (const v of views) {
+    const i = Math.min(state.chapter, v.count - 1);
+    v.rendition.display(v.book.spine.get(i).href);
+  }
+  $('chapter').textContent = `${state.chapter + 1} / ${total}장`;
+  if (browser) showBrowserChapter(state.chapter);
+}
+
+// ---------------- 브라우저 내장 번역 (API 키 불필요)
+//
+// Chrome 138 이상의 Translator API를 쓴다. 번역 모델은 브라우저가 기기 안에서 실행하며,
+// 번역 결과는 파일로 저장하지 않고 화면에만 보여 준다.
+
+state.transMode = 'server';   // 'server' | 'browser'
+state.browser = { translator: null, lang: null, cache: new Map(), epub: null, token: 0 };
+
+async function getTranslator(sourceLanguage) {
+  if (typeof window.Translator === 'undefined') {
+    throw new Error('이 브라우저에는 내장 번역 API가 없습니다. Chrome 138 이상에서 열어 주세요.');
+  }
+  const opts = { sourceLanguage, targetLanguage: 'ko' };
+  const availability = await Translator.availability(opts);
+  if (availability === 'unavailable') {
+    throw new Error(`${sourceLanguage} → ko 번역을 이 브라우저에서 쓸 수 없습니다.`);
+  }
+  if (state.browser.translator && state.browser.lang === sourceLanguage) return state.browser.translator;
+  setStatus(availability === 'available' ? '번역기 준비 중...' : '번역 모델 내려받는 중...');
+  const translator = await Translator.create({
+    ...opts,
+    monitor(m) {
+      m.addEventListener('downloadprogress', (e) => setStatus(`번역 모델 내려받는 중 ${Math.round(e.loaded * 100)}%`));
+    },
+  });
+  state.browser.translator = translator;
+  state.browser.lang = sourceLanguage;
+  return translator;
+}
+
+// 긴 문단은 Translator 입력 한도를 넘지 않도록 문장 경계에서 나눈다.
+function chunkText(text, max = 1000) {
+  const parts = [];
+  let rest = text;
+  while (rest.length > max) {
+    let cut = rest.lastIndexOf('. ', max);
+    if (cut < max * 0.5) cut = rest.lastIndexOf(' ', max);
+    if (cut <= 0) cut = max - 1;
+    parts.push(rest.slice(0, cut + 1));
+    rest = rest.slice(cut + 1).trimStart();
+  }
+  if (rest) parts.push(rest);
+  return parts;
+}
+
+async function translateText(text) {
+  const out = [];
+  for (const part of chunkText(text)) {
+    const key = `${state.browser.lang}|${part}`;
+    if (!state.browser.cache.has(key)) {
+      state.browser.cache.set(key, await state.browser.translator.translate(part));
+    }
+    out.push(state.browser.cache.get(key));
+  }
+  return out.join(' ');
+}
+
+const hasLetter = (s) => /\p{L}/u.test(s);
+
+// EPUB: zip을 직접 읽어 spine 순서대로 장(XHTML) 목록을 만든다.
+async function loadEpubChapters(src) {
+  const buf = typeof src === 'string' ? await (await fetch(src)).arrayBuffer() : src.slice(0);
+  const zip = await JSZip.loadAsync(buf);
+  const parse = (xml, type) => new DOMParser().parseFromString(xml, type);
+  const container = parse(await zip.file('META-INF/container.xml').async('string'), 'application/xml');
+  const opfPath = container.getElementsByTagName('rootfile')[0].getAttribute('full-path');
+  const opf = parse(await zip.file(opfPath).async('string'), 'application/xml');
+  const base = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
+  const manifest = {};
+  for (const item of opf.getElementsByTagName('item')) manifest[item.getAttribute('id')] = item.getAttribute('href');
+  const chapters = [];
+  for (const ref of opf.getElementsByTagName('itemref')) {
+    const href = manifest[ref.getAttribute('idref')];
+    if (!href) continue;
+    const file = zip.file(decodeURIComponent(base + href));
+    if (!file) continue;
+    const xml = await file.async('string');
+    let doc = parse(xml, 'application/xhtml+xml');
+    if (doc.querySelector('parsererror')) doc = parse(xml, 'text/html');
+    chapters.push(doc);
+  }
+  return chapters;
+}
+
+const EPUB_BLOCKS = 'p, h1, h2, h3, h4, h5, h6, li, blockquote, figcaption, dt, dd';
+
+function epubParagraphs(doc) {
+  if (!doc.body) return [];
+  const out = [];
+  doc.body.querySelectorAll(EPUB_BLOCKS).forEach((el) => {
+    if (el.querySelector(EPUB_BLOCKS)) return; // 안쪽 블록이 있으면 안쪽을 쓴다
+    const text = el.textContent.replace(/\s+/g, ' ').trim();
+    if (hasLetter(text)) out.push(text);
+  });
+  return out;
+}
+
+// PDF: 텍스트 조각을 줄 단위로 모으고, 줄 간격이 벌어지면 문단을 나눈다.
+async function pdfPageParagraphs(page) {
+  const content = await page.getTextContent();
+  const lines = [];
+  let cur = null;
+  const flush = () => { if (cur && cur.text.trim()) lines.push(cur); cur = null; };
+  for (const item of content.items) {
+    const y = item.transform[5];
+    const h = Math.abs(item.transform[3]) || item.height || 10;
+    if (!cur || Math.abs(cur.y - y) > h * 0.5) { flush(); cur = { y, h, text: '' }; }
+    cur.text += item.str;
+    if (item.hasEOL) flush();
+  }
+  flush();
+
+  const paras = [];
+  let prev = null;
+  let buf = '';
+  for (const line of lines) {
+    const t = line.text.replace(/\s+/g, ' ').trim();
+    if (!t) continue;
+    if (!prev || Math.abs(prev.y - line.y) > prev.h * 1.8) {
+      if (buf) paras.push(buf);
+      buf = t;
+    } else if (buf.endsWith('-')) {
+      buf = buf.slice(0, -1) + t; // 줄 끝 하이픈 붙이기
+    } else {
+      buf += ' ' + t;
+    }
+    prev = line;
+  }
+  if (buf) paras.push(buf);
+  return paras.filter(hasLetter);
+}
+
+function makeParaEl(text, pending) {
+  const p = document.createElement('p');
+  p.className = pending ? 'bpara pending' : 'bpara';
+  p.textContent = text;
+  return p;
+}
+
+// 한 구역(EPUB 장 또는 PDF 쪽)의 문단을 차례로 번역해 채운다.
+async function fillParagraphs(box, paragraphs, token) {
+  box.innerHTML = '';
+  if (paragraphs.length === 0) {
+    box.appendChild(makeParaEl('(번역할 텍스트가 없습니다)', true));
+    return;
+  }
+  const els = paragraphs.map((t) => { const el = makeParaEl(t, true); box.appendChild(el); return el; });
+  for (let i = 0; i < paragraphs.length; i++) {
+    const text = await translateText(paragraphs[i]);
+    if (token !== state.browser.token) return; // 다른 장/파일로 넘어갔으면 중단
+    els[i].textContent = text;
+    els[i].classList.remove('pending');
+  }
+}
+
+async function showBrowserChapter(index) {
+  const view = state.views.trans;
+  if (!view || view.kind !== 'browser' || !view.chapters) return;
+  if (view.shown === index) return;
+  view.shown = index;
+  const token = ++state.browser.token;
+  view.content.innerHTML = '';
+  const doc = view.chapters[index];
+  if (!doc) return;
+  await fillParagraphs(view.content, epubParagraphs(doc), token);
+}
+
+// 칸 높이에 맞도록 글자 크기를 줄인다(서버 번역 PDF와 같은 방식). 최소 9px까지 줄이고,
+// 그래도 넘치면 칸 안에서 스크롤한다.
+function fitBox(box) {
+  let size = 15;
+  box.style.fontSize = `${size}px`;
+  while (box.scrollHeight > box.clientHeight + 1 && size > 9) {
+    size -= 0.5;
+    box.style.fontSize = `${size}px`;
+  }
+}
+
+async function fillBrowserPdfPage(view, index) {
+  const box = view.content.querySelector(`[data-index="${index}"]`);
+  if (!box || box.dataset.done) return;
+  box.dataset.done = '1';
+  const token = state.browser.token;
+  try {
+    const page = await view.pdf.getPage(index + 1);
+    const paras = await pdfPageParagraphs(page);
+    box.innerHTML = '';
+    const label = document.createElement('div');
+    label.className = 'pno';
+    label.textContent = `${index + 1} / ${view.count}쪽`;
+    box.appendChild(label);
+    const inner = document.createElement('div');
+    box.appendChild(inner);
+    await fillParagraphs(inner, paras, token);
+    fitBox(box);
+  } catch (e) {
+    box.textContent = `이 쪽을 번역할 수 없습니다: ${e.message}`;
+    delete box.dataset.done;
+  }
+}
+
+async function startBrowserView() {
+  const srcLang = $('srcLang').value;
+  await getTranslator(srcLang);
+
+  dropView('trans');
+  const content = $('paneTrans').querySelector('.content');
+  content.innerHTML = '';
+  state.transMode = 'browser';
+  state.browser.token++;
+
+  const src = await srcOf(state.item);
+  if (isEpub()) {
+    if (!state.browser.epub || state.browser.epub.name !== state.item.name) {
+      setStatus('EPUB 장 목록 읽는 중...');
+      state.browser.epub = { name: state.item.name, chapters: await loadEpubChapters(src) };
+    }
+    const chapters = state.browser.epub.chapters;
+    state.views.trans = { kind: 'browser', content, chapters, count: chapters.length, shown: -1 };
+    showChapter(state.chapter);
+    setStatus('브라우저 번역 (키 불필요)');
+    return;
+  }
+
+  const pdf = await pdfjsLib.getDocument(typeof src === 'string' ? src : { data: src.slice(0) }).promise;
+  const view = { kind: 'browser', pdf, content, count: pdf.numPages, pdfPages: pdf.numPages };
+  state.views.trans = view;
+  // 쪽이 화면에 가까워질 때만 그 쪽을 번역한다.
+  // 원본 쪽과 같은 배율·같은 여백·같은 높이로 칸을 만들어, 같은 쪽끼리 가로로 나란히 놓이게 한다.
+  const width = Math.max(320, content.clientWidth - 32);
+  const base = (await pdf.getPage(1)).getViewport({ scale: 1 });
+  const scale = width / base.width;
+  for (let i = 0; i < pdf.numPages; i++) {
+    const vp = (await pdf.getPage(i + 1)).getViewport({ scale });
+    const box = document.createElement('div');
+    box.className = 'bpage';
+    box.dataset.index = String(i);
+    box.style.width = `${vp.width}px`;
+    box.style.height = `${vp.height}px`; // 칸 높이를 고정해서 뒤 쪽이 밀리지 않게 한다
+    box.style.maxWidth = 'none';
+    box.textContent = `${i + 1} / ${pdf.numPages}쪽 번역 대기 중...`;
+    content.appendChild(box);
+  }
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (e.isIntersecting) fillBrowserPdfPage(view, Number(e.target.dataset.index));
+    }
+  }, { root: content, rootMargin: '400px 0px' });
+  content.querySelectorAll('.bpage').forEach((el) => io.observe(el));
+  view.observer = io;
+  setStatus('브라우저 번역 (키 불필요)');
+}
+
+$('browserBtn').onclick = async () => {
+  if (!state.item) return;
+  $('browserBtn').disabled = true;
+  setStatus('브라우저 번역 준비 중...');
+  try {
+    await startBrowserView();
+    applyMode();
+  } catch (e) {
+    setStatus(`브라우저 번역 실패: ${e.message}`);
+  } finally {
+    $('browserBtn').disabled = false;
+  }
+};
+
+// ---------------- 나란히 보기 스크롤 동기화 (PDF)
+
+// 원본 창과 번역 창의 스크롤 비율을 맞춘다(PDF, EPUB, 브라우저 번역 모두 같은 방식).
+// 길이가 다른 문서는 문장 위치가 정확히 맞지 않고 비율로만 맞는다.
+function syncScroll(source) {
+  if (state.syncing || state.mode !== 'side') return;
+  const origC = $('paneOrig').querySelector('.content');
+  const transC = $('paneTrans').querySelector('.content');
+  const other = source === origC ? transC : origC;
+  if (!other || other.childElementCount === 0) return;
+  const range = source.scrollHeight - source.clientHeight;
+  if (range <= 0) return;
+  const ratio = source.scrollTop / range;
+  state.syncing = true;
+  other.scrollTop = ratio * (other.scrollHeight - other.clientHeight);
+  requestAnimationFrame(() => { state.syncing = false; });
+}
+
+function attachScrollSync() {
+  for (const id of ['paneOrig', 'paneTrans']) {
+    const c = $(id).querySelector('.content');
+    c.onscroll = () => syncScroll(c);
+  }
+}
+
+// ---------------- 레이아웃
+
+function applyMode() {
+  document.querySelectorAll('#modes button').forEach((b) => {
+    b.classList.toggle('on', b.dataset.mode === state.mode);
+  });
+  $('paneOrig').classList.toggle('hidden', state.mode === 'translated');
+  $('paneTrans').classList.toggle('hidden', state.mode === 'original');
+  $('panes').classList.toggle('single', state.mode !== 'side');
+  attachScrollSync();
+  requestAnimationFrame(() => {
+    for (const v of Object.values(state.views)) {
+      if (v.kind === 'epub') { try { v.rendition.resize(); } catch (_) {} }
+    }
+    showChapter(state.chapter);
+  });
+}
+
+document.querySelectorAll('#modes button').forEach((b) => {
+  b.onclick = () => { state.mode = b.dataset.mode; applyMode(); };
+});
+$('prev').onclick = () => showChapter(state.chapter - 1);
+$('next').onclick = () => showChapter(state.chapter + 1);
+
+// ---------------- 번역 실행
+
+function stopPolling() {
+  if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; }
+}
+
+$('translateBtn').onclick = async () => {
+  if (!state.item) return;
+  state.transMode = 'server';
+  $('translateBtn').disabled = true;
+  setStatus('번역 요청 중...');
+  try {
+    const { job_id } = await api('/local/translate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: state.item.name, target_lang: 'ko' }),
+    });
+    state.pollTimer = setInterval(() => pollJob(job_id), 2000);
+    pollJob(job_id);
+  } catch (e) {
+    $('translateBtn').disabled = false;
+    setStatus(`번역을 시작할 수 없습니다: ${e.message}`);
+  }
+};
+
+async function pollJob(jobId) {
+  try {
+    const job = await api(`/jobs/${jobId}`);
+    if (job.status === 'done') {
+      stopPolling();
+      let text = `번역 완료: ${job.translated}/${job.total} 문단, 원문 유지 ${job.failed}`;
+      if (job.overflow) text += `, 칸을 넘친 문단 ${job.overflow}`;
+      setStatus(text);
+      $('translateBtn').disabled = false;
+      state.item.translated = true;
+      dropView('trans');
+      state.transMode = 'server';
+      await openTranslated();
+      applyMode();
+    } else if (job.status === 'failed') {
+      stopPolling();
+      $('translateBtn').disabled = false;
+      setStatus(`번역 실패: ${job.error}`);
+    } else {
+      const total = job.progress ? job.progress.total : 0;
+      const done = job.progress ? job.progress.done : 0;
+      setStatus(total ? `번역 중 ${done}/${total} 문단` : '번역 준비 중...');
+    }
+  } catch (e) {
+    stopPolling();
+    $('translateBtn').disabled = false;
+    setStatus(`상태를 확인할 수 없습니다: ${e.message}`);
+  }
+}
+
+// 창 크기가 바뀌면 PDF 쪽 배율을 다시 맞추려고 다시 연다.
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (!state.item || isEpub()) { applyMode(); return; }
+    (async () => {
+      const wasBrowser = state.transMode === 'browser';
+      clearViews();
+      await openOriginal();
+      if (wasBrowser) {
+        try { await startBrowserView(); } catch (e) { setStatus(`브라우저 번역 실패: ${e.message}`); }
+      } else if (state.item.translated) {
+        await openTranslated();
+      }
+      applyMode();
+    })();
+  }, 400);
+});
+
+// 파일 목록 접기/펴기
+function toggleLibrary() {
+  const collapsed = $('files').classList.toggle('hidden');
+  $('folderBox').classList.toggle('hidden', collapsed);
+  $('libToggle').textContent = `${collapsed ? '▸' : '▾'} 라이브러리`;
+}
+$('libToggle').onclick = toggleLibrary;
+
+// 사이드바 전체를 접어 보기 영역을 넓힌다. 폭이 바뀌면 PDF 쪽 배율을 다시 맞추도록 resize를 알린다.
+$('sideBtn').onclick = () => {
+  document.querySelector('aside').classList.toggle('closed');
+  window.dispatchEvent(new Event('resize'));
+};
+$('libToggle').onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleLibrary(); } };
+
+// 라이브러리 폴더 변경 (로컬 또는 네트워크 경로). 바뀌면 화면을 새로 불러온다.
+$('folderBtn').onclick = async () => {
+  const path = $('folderInput').value.trim();
+  if (!path) { setStatus('폴더 경로를 입력하세요.'); return; }
+  try {
+    await api('/local/folder', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path }),
+    });
+    location.reload();
+  } catch (e) {
+    setStatus(`폴더를 바꿀 수 없습니다: ${e.message}`);
+  }
+};
+$('folderInput').onkeydown = (e) => { if (e.key === 'Enter') $('folderBtn').click(); };
+
+loadFiles();
+</script>
+</body>
+</html>
