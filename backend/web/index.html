@@ -213,7 +213,8 @@ function enterPickerMode() {
   };
   const notice = document.createElement('div');
   notice.className = 'notice';
-  notice.innerHTML = `
+  // 브라우저 언어에 맞는 안내 문구를 보여 준다(ko, en, ja, zh, fr, de, es).
+  const koHtml = `
     <strong>이용 안내 (면책 문구 초안)</strong><br>
     이 도구는 이용자가 <b>본인이 적법하게 소유하거나 이용할 권한이 있는</b> EPUB·PDF 파일을 번역해 보기 위한 보조 도구입니다.
     업로드하거나 번역하는 자료에 대한 저작권과 이용 권한은 이용자 본인에게 있으며, 권한 없는 자료를 사용하지 마십시오.
@@ -221,6 +222,59 @@ function enterPickerMode() {
     서비스 운영자는 이용자가 업로드한 자료와 번역 결과의 적법성을 보증하지 않으며, 이용자의 권한 없는 이용으로 발생한 저작권 침해 등 분쟁에 대해 책임을 지지 않습니다.
     번역 결과는 개인 학습·참고 목적으로만 쓰고 재배포하지 마십시오.
     <em>(초안: 공개 운영 전에 저작권 전문 변호사의 검토가 필요합니다.)</em>`;
+  const enHtml = `
+    <strong>Terms of use (draft)</strong><br>
+    This tool helps you translate EPUB and PDF files that <b>you lawfully own or are otherwise authorized to use</b>.
+    You are responsible for your own rights and permissions for any file you upload or translate. Do not use files you are not authorized to use.
+    In file-picker mode, files are not sent to a server; they are processed only inside your browser.
+    The operator does not warrant the lawfulness of uploaded material or translated output and is not responsible for copyright infringement or other disputes arising from unauthorized use by you.
+    Use translated output only for personal study or reference. Do not redistribute it.
+    <em>(Draft: requires review by a copyright attorney before public operation.)</em>`;
+  const otherNotices = {
+    ja: `
+    <strong>利用上の注意（免責文の草案）</strong><br>
+    このツールは、利用者が<b>適法に所有している、または利用する権限のある</b> EPUB・PDF ファイルを翻訳するための補助ツールです。
+    アップロードや翻訳を行う資料の著作権および利用権は利用者本人に帰属します。権限のない資料は使用しないでください。
+    ファイル選択モードでは、ファイルはサーバーに送信されず、お使いのブラウザ内でのみ処理されます。
+    運営者は、アップロードされた資料および翻訳結果の適法性を保証せず、利用者による権限のない利用から生じた著作権侵害その他の紛争について責任を負いません。
+    翻訳結果は個人の学習・参考目的のみに使用し、再配布しないでください。
+    <em>（草案：公開運用の前に著作権専門の弁護士による確認が必要です。）</em>`,
+    zh: `
+    <strong>使用须知（免责声明草案）</strong><br>
+    本工具用于帮助用户翻译<b>其依法拥有或有权使用</b>的 EPUB 和 PDF 文件。
+    用户上传或翻译的资料的版权及使用权由用户本人负责。请勿使用未经授权的资料。
+    在文件选择模式下，文件不会发送到服务器，仅在您的浏览器内处理。
+    运营方不保证上传资料及翻译结果的合法性，对于用户未经授权使用所引发的版权侵权或其他纠纷不承担责任。
+    翻译结果仅可用于个人学习或参考，请勿再次传播。
+    <em>（草案：公开运营前需经版权专业律师审核。）</em>`,
+    fr: `
+    <strong>Conditions d'utilisation (projet)</strong><br>
+    Cet outil aide à traduire des fichiers EPUB et PDF que <b>vous possédez légalement ou pour lesquels vous êtes autorisé(e)</b>.
+    Vous êtes responsable de vos droits et autorisations pour tout fichier que vous importez ou traduisez. N'utilisez pas de fichiers pour lesquels vous n'avez pas d'autorisation.
+    En mode sélection de fichiers, les fichiers ne sont pas envoyés à un serveur ; ils sont traités uniquement dans votre navigateur.
+    L'exploitant ne garantit pas la légalité des contenus importés ni des traductions et n'est pas responsable des atteintes au droit d'auteur ou autres litiges résultant d'une utilisation non autorisée de votre part.
+    Utilisez les traductions uniquement à des fins d'étude ou de référence personnelle. Ne les redistribuez pas.
+    <em>(Projet : doit être examiné par un avocat spécialisé en droit d'auteur avant toute exploitation publique.)</em>`,
+    de: `
+    <strong>Nutzungshinweis (Entwurf)</strong><br>
+    Dieses Werkzeug hilft dabei, EPUB- und PDF-Dateien zu übersetzen, die <b>Sie rechtmäßig besitzen oder für deren Nutzung Sie berechtigt sind</b>.
+    Für Ihre Rechte und Berechtigungen an hochgeladenen oder übersetzten Dateien sind Sie selbst verantwortlich. Verwenden Sie keine Dateien, für die Sie nicht berechtigt sind.
+    Im Dateiauswahlmodus werden Dateien nicht an einen Server gesendet, sondern nur im Browser verarbeitet.
+    Der Betreiber übernimmt keine Gewähr für die Rechtmäßigkeit hochgeladener Inhalte oder Übersetzungen und haftet nicht für Urheberrechtsverletzungen oder sonstige Streitigkeiten, die aus einer unberechtigten Nutzung durch Sie entstehen.
+    Verwenden Sie die Übersetzungen nur zum persönlichen Lernen oder als Referenz. Geben Sie sie nicht weiter.
+    <em>(Entwurf: Vor einem öffentlichen Betrieb ist eine Prüfung durch einen auf Urheberrecht spezialisierten Anwalt erforderlich.)</em>`,
+    es: `
+    <strong>Condiciones de uso (borrador)</strong><br>
+    Esta herramienta ayuda a traducir archivos EPUB y PDF que <b>usted posee legalmente o para los que tiene autorización de uso</b>.
+    Usted es responsable de sus derechos y permisos sobre cualquier archivo que suba o traduzca. No utilice archivos para los que no tenga autorización.
+    En el modo de selección de archivos, los archivos no se envían a ningún servidor; se procesan solo dentro de su navegador.
+    El operador no garantiza la legalidad del material subido ni de las traducciones y no es responsable de infracciones de derechos de autor u otras disputas derivadas de un uso no autorizado por su parte.
+    Use las traducciones solo para estudio o referencia personal. No las redistribuya.
+    <em>(Borrador: debe ser revisado por un abogado especializado en derechos de autor antes de operar públicamente.)</em>`,
+  };
+  const lang = (navigator.language || 'en').toLowerCase().split('-')[0];
+  const table = { ko: koHtml, en: enHtml, ...otherNotices };
+  notice.innerHTML = table[lang] || enHtml; // 목록에 없는 언어는 영어
   li.append(label, input, notice);
   ul.appendChild(li);
   setStatus('');
