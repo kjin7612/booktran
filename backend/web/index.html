@@ -56,6 +56,9 @@
   .textLayer { position: absolute; left: 0; top: 0; right: 0; bottom: 0; overflow: hidden; line-height: 1; }
   .textLayer > span { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; }
   .textLayer ::selection { background: rgba(91, 91, 214, 0.35); }
+  .linkLayer { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+  .pdfLink { position: absolute; display: block; cursor: pointer; border-radius: 2px; }
+  .pdfLink:hover { background: rgba(91, 91, 214, 0.15); }
   .hidden { display: none !important; }
   select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 6px; }
   .bpara { margin: 0 0 0.8em; line-height: 1.6; color: var(--text); }
@@ -367,7 +370,7 @@ async function openPdf(key, src, paneId) {
     for (const e of entries) {
       if (!e.isIntersecting) continue;
       const p = view.pages[Number(e.target.dataset.index)];
-      if (p && !p.rendered) { p.rendered = true; renderPdfPage(doc, p, scale); }
+      if (p && !p.rendered) { p.rendered = true; renderPdfPage(view, p, scale); }
     }
   }, { root: content, rootMargin: '600px 0px' });
 
@@ -384,7 +387,8 @@ async function openPdf(key, src, paneId) {
   view.observer = io;
 }
 
-async function renderPdfPage(doc, p, scale) {
+async function renderPdfPage(view, p, scale) {
+  const doc = view.pdf;
   const page = await doc.getPage(p.num);
   const vp = page.getViewport({ scale });
   const canvas = document.createElement('canvas');
@@ -404,6 +408,48 @@ async function renderPdfPage(doc, p, scale) {
   p.wrap.appendChild(textDiv);
   const textContent = await page.getTextContent();
   await pdfjsLib.renderTextLayer({ textContentSource: textContent, container: textDiv, viewport: vp, textDivs: [] }).promise;
+
+  // 링크 레이어: 목차처럼 쪽 이동 링크와 바깥 주소 링크를 누를 수 있게 한다
+  const annotations = await page.getAnnotations();
+  const linkDiv = document.createElement('div');
+  linkDiv.className = 'linkLayer';
+  for (const a of annotations) {
+    if (a.subtype !== 'Link' || !a.rect) continue;
+    const [x1, y1, x2, y2] = vp.convertToViewportRectangle(a.rect);
+    const el = document.createElement('a');
+    el.className = 'pdfLink';
+    el.style.left = `${Math.min(x1, x2)}px`;
+    el.style.top = `${Math.min(y1, y2)}px`;
+    el.style.width = `${Math.abs(x2 - x1)}px`;
+    el.style.height = `${Math.abs(y2 - y1)}px`;
+    if (a.dest) {
+      el.href = '#';
+      el.title = '해당 쪽으로 이동';
+      el.onclick = (e) => { e.preventDefault(); goToPdfDest(view, a.dest); };
+    } else if (a.url && /^(https?:|mailto:)/i.test(a.url)) {
+      el.href = a.url;
+      el.target = '_blank';
+      el.rel = 'noopener noreferrer';
+      el.title = a.url;
+    } else {
+      continue; // 지원하지 않는 링크(실행 파일 등)는 만들지 않는다
+    }
+    linkDiv.appendChild(el);
+  }
+  p.wrap.appendChild(linkDiv);
+}
+
+// 쪽 이동 링크: 목적지(이름 또는 배열)를 쪽 번호로 바꿔 그 쪽으로 스크롤한다
+async function goToPdfDest(view, dest) {
+  try {
+    const explicit = typeof dest === 'string' ? await view.pdf.getDestination(dest) : dest;
+    if (!explicit || !explicit[0]) return;
+    const index = await view.pdf.getPageIndex(explicit[0]);
+    const target = view.pages[index];
+    if (target) target.wrap.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  } catch (e) {
+    setStatus(`링크를 열 수 없습니다: ${e.message}`);
+  }
 }
 
 // ---------------- 공통 열기
