@@ -26,7 +26,14 @@
   .notice em { color: var(--muted); }
   .noticeHead { width: 100%; display: flex; justify-content: space-between; align-items: center; background: none; border: none; padding: 0; font: inherit; font-size: 12px; font-weight: 700; color: #b5651d; cursor: pointer; text-align: left; }
   .noticeKey { font-size: 12px; font-weight: 600; color: var(--text); margin: 4px 0 2px; }
-  #tocBox { border-top: 1px solid var(--line); max-height: 42%; overflow-y: auto; }
+  /* 사이드바: 목차 / 손잡이 / 파일 목록을 세로로 나눠 쓴다. 손잡이로 목차 높이를 조절하고, 서로 겹치지 않는다. */
+  #folderBox { flex: none; }
+  #files { flex: 1 1 0; min-height: 80px; }
+  #tocBox { flex: 0 0 var(--toc-h, 40%); min-height: 60px; overflow-y: auto; border-top: 1px solid var(--line); }
+  #splitter { flex: none; height: 6px; cursor: ns-resize; background: var(--line); touch-action: none; }
+  #splitter:hover { background: var(--accent); }
+  aside.no-files #tocBox { flex: 1 1 0; }
+  aside.no-files #splitter { display: none; }
   #tocBox .tocHead { font-size: 13px; font-weight: 600; padding: 8px 16px 4px; color: var(--muted); }
   #toc { list-style: none; margin: 0; padding: 0 0 8px; }
   #toc li { font-size: 13px; padding: 4px 16px; cursor: pointer; word-break: break-all; }
@@ -85,11 +92,12 @@
       <button id="folderBtn">폴더 변경</button>
     </div>
   </div>
-  <ul id="files"></ul>
   <div id="tocBox" class="hidden">
     <div class="tocHead">목차</div>
     <ul id="toc"></ul>
   </div>
+  <div id="splitter" class="hidden" title="드래그해서 목차와 파일 목록의 크기 조절"></div>
+  <ul id="files"></ul>
 </aside>
 <main>
   <header>
@@ -529,7 +537,11 @@ function joinPath(dir, rel) {
 function renderToc(items) {
   const ul = $('toc');
   ul.innerHTML = '';
-  if (!items || items.length === 0) { $('tocBox').classList.add('hidden'); return; }
+  if (!items || items.length === 0) {
+    $('tocBox').classList.add('hidden');
+    $('splitter').classList.add('hidden');
+    return;
+  }
   for (const it of items) {
     const li = document.createElement('li');
     li.textContent = it.title || '(제목 없음)';
@@ -539,6 +551,7 @@ function renderToc(items) {
     ul.appendChild(li);
   }
   $('tocBox').classList.remove('hidden');
+  $('splitter').classList.remove('hidden');
 }
 
 function buildToc() {
@@ -1098,6 +1111,7 @@ window.addEventListener('resize', () => {
 function toggleLibrary() {
   const collapsed = $('files').classList.toggle('hidden');
   $('folderBox').classList.toggle('hidden', collapsed);
+  document.querySelector('aside').classList.toggle('no-files', collapsed);
   $('libToggle').textContent = `${collapsed ? '▸' : '▾'} 라이브러리`;
 }
 $('libToggle').onclick = toggleLibrary;
@@ -1125,6 +1139,38 @@ $('folderBtn').onclick = async () => {
   }
 };
 $('folderInput').onkeydown = (e) => { if (e.key === 'Enter') $('folderBtn').click(); };
+
+// 목차 높이 조절 손잡이. 드래그한 높이는 브라우저에 저장해 다음에도 같은 크기로 연다.
+(function setupSplitter() {
+  const aside = document.querySelector('aside');
+  const toc = $('tocBox');
+  const splitter = $('splitter');
+  const apply = (px) => aside.style.setProperty('--toc-h', `${px}px`);
+  try {
+    const saved = Number(localStorage.getItem('tocHeight'));
+    if (saved > 0) apply(saved);
+  } catch (_) {}
+
+  splitter.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    splitter.setPointerCapture(e.pointerId);
+    const startY = e.clientY;
+    const startH = toc.getBoundingClientRect().height;
+    const move = (ev) => {
+      // 목차는 최소 60px, 파일 목록은 최소 80px를 남긴다
+      const max = aside.clientHeight - 80 - splitter.offsetHeight - $('folderBox').offsetHeight - 40;
+      const h = Math.min(Math.max(60, startH + (ev.clientY - startY)), Math.max(60, max));
+      apply(Math.round(h));
+    };
+    const up = () => {
+      splitter.removeEventListener('pointermove', move);
+      splitter.removeEventListener('pointerup', up);
+      try { localStorage.setItem('tocHeight', String(Math.round(toc.getBoundingClientRect().height))); } catch (_) {}
+    };
+    splitter.addEventListener('pointermove', move);
+    splitter.addEventListener('pointerup', up);
+  });
+})();
 
 loadFiles();
 </script>
