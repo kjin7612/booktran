@@ -24,6 +24,14 @@
   .folderRow button { padding: 6px 10px; font-size: 13px; }
   .notice { margin-top: 10px; font-size: 12px; line-height: 1.6; color: var(--muted); cursor: default; white-space: normal; }
   .notice em { color: var(--muted); }
+  .noticeHead { width: 100%; display: flex; justify-content: space-between; align-items: center; background: none; border: none; padding: 0; font: inherit; font-size: 12px; font-weight: 700; color: #b5651d; cursor: pointer; text-align: left; }
+  .noticeKey { font-size: 12px; font-weight: 600; color: var(--text); margin: 4px 0 2px; }
+  #tocBox { border-top: 1px solid var(--line); max-height: 42%; overflow-y: auto; }
+  #tocBox .tocHead { font-size: 13px; font-weight: 600; padding: 8px 16px 4px; color: var(--muted); }
+  #toc { list-style: none; margin: 0; padding: 0 0 8px; }
+  #toc li { font-size: 13px; padding: 4px 16px; cursor: pointer; word-break: break-all; }
+  #toc li:hover { background: var(--bg); }
+  pre.plain { white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 15px; line-height: 1.8; margin: 0; padding: 20px 24px; color: var(--text); }
   #path { font-size: 12px; color: var(--muted); margin: 0 16px 8px; word-break: break-all; }
   #files { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
   #files li { padding: 10px 16px; border-top: 1px solid var(--line); cursor: pointer; font-size: 14px; word-break: break-all; }
@@ -78,6 +86,10 @@
     </div>
   </div>
   <ul id="files"></ul>
+  <div id="tocBox" class="hidden">
+    <div class="tocHead">목차</div>
+    <ul id="toc"></ul>
+  </div>
 </aside>
 <main>
   <header>
@@ -192,16 +204,17 @@ function enterPickerMode() {
   label.className = 'meta';
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = '.epub,.pdf,application/epub+zip,application/pdf';
+  input.accept = '.epub,.pdf,.txt,application/epub+zip,application/pdf,text/plain';
   input.style.marginTop = '8px';
   input.onchange = () => {
     const file = input.files[0];
     if (!file) return;
     const lower = file.name.toLowerCase();
-    if (!lower.endsWith('.epub') && !lower.endsWith('.pdf')) { setStatus('EPUB 또는 PDF 파일만 열 수 있습니다.'); return; }
+    const format = lower.endsWith('.epub') ? 'epub' : lower.endsWith('.pdf') ? 'pdf' : lower.endsWith('.txt') ? 'txt' : null;
+    if (!format) { setStatus('EPUB, PDF, TXT 파일만 열 수 있습니다.'); return; }
     const item = {
       name: file.name,
-      format: lower.endsWith('.epub') ? 'epub' : 'pdf',
+      format,
       size: file.size,
       local: file,
       translated: false,
@@ -277,7 +290,33 @@ function enterPickerMode() {
   };
   const lang = (navigator.language || 'en').toLowerCase().split('-')[0];
   const table = { ko: koHtml, en: enHtml, ...otherNotices };
-  notice.innerHTML = table[lang] || enHtml; // 목록에 없는 언어는 영어
+  // 접혀 있어도 보이는 머리글과 핵심 주의 한 줄, 펼치면 전체 안내가 나온다.
+  const heads = {
+    ko: ['⚠ 이용 안내 (주의 사항)', '본인이 권한이 있는 파일만 사용하세요.'],
+    en: ['⚠ Terms of use (important)', 'Use only files you are authorized to use.'],
+    ja: ['⚠ 利用上の注意（重要）', '権限のあるファイルだけを使用してください。'],
+    zh: ['⚠ 使用须知（重要）', '请只使用您有权使用的文件。'],
+    fr: ['⚠ Conditions d\'utilisation (important)', 'N\'utilisez que des fichiers que vous êtes autorisé(e) à utiliser.'],
+    de: ['⚠ Nutzungshinweis (wichtig)', 'Verwenden Sie nur Dateien, für die Sie berechtigt sind.'],
+    es: ['⚠ Condiciones de uso (importante)', 'Use solo archivos para los que tenga autorización.'],
+  };
+  const [headText, keyLine] = heads[lang] || heads.en;
+  const head = document.createElement('button');
+  head.type = 'button';
+  head.className = 'noticeHead';
+  head.innerHTML = `<span>${headText}</span><span class="noticeToggle">▾</span>`;
+  const keyEl = document.createElement('div');
+  keyEl.className = 'noticeKey';
+  keyEl.textContent = keyLine;
+  const body = document.createElement('div');
+  body.className = 'noticeBody';
+  body.innerHTML = table[lang] || enHtml; // 목록에 없는 언어는 영어
+  head.onclick = () => {
+    const hidden = body.classList.toggle('hidden');
+    head.querySelector('.noticeToggle').textContent = hidden ? '▸' : '▾';
+  };
+  notice.innerHTML = '';
+  notice.append(head, keyEl, body);
   li.append(label, input, notice);
   ul.appendChild(li);
   setStatus('');
@@ -314,7 +353,7 @@ async function selectFile(item, li) {
 
   state.transMode = 'server';
   // 서버 번역은 로컬 백엔드가 있고 서버 파일일 때만 쓸 수 있다.
-  $('translateBtn').classList.toggle('hidden', !state.serverMode || !!item.local);
+  $('translateBtn').classList.toggle('hidden', !state.serverMode || !!item.local || item.format === 'txt');
   $('translateBtn').disabled = false;
   $('browserBtn').classList.remove('hidden');
   $('browserBtn').disabled = false;
@@ -326,6 +365,7 @@ async function selectFile(item, li) {
   $('chapter').classList.toggle('hidden', !isEpub());
 
   await openOriginal();
+  buildToc();
   if (item.translated) await openTranslated();
   else showMessage('paneTrans', '아직 번역되지 않았습니다. "번역 시작"(Gemini 키 필요) 또는 "번역"을 누르세요.');
   applyMode();
@@ -457,6 +497,148 @@ async function goToPdfDest(view, dest) {
   }
 }
 
+// ---------------- 텍스트 파일 (TXT)
+
+async function textOf(src) {
+  if (typeof src === 'string') return (await fetch(src)).text();
+  return new TextDecoder('utf-8').decode(src);
+}
+
+async function openText(key, src, paneId) {
+  const content = $(paneId).querySelector('.content');
+  content.innerHTML = '';
+  const pre = document.createElement('pre');
+  pre.className = 'plain';
+  pre.textContent = await textOf(src);
+  content.appendChild(pre);
+  state.views[key] = { kind: 'text', content, count: 1 };
+}
+
+// ---------------- 목차 (사이드바)
+
+function joinPath(dir, rel) {
+  const out = [];
+  for (const part of (dir + rel).split('/')) {
+    if (part === '..') out.pop();
+    else if (part && part !== '.') out.push(part);
+  }
+  return out.join('/');
+}
+
+// 목차 항목 목록을 사이드바에 그린다. items: {title, depth, pick()}
+function renderToc(items) {
+  const ul = $('toc');
+  ul.innerHTML = '';
+  if (!items || items.length === 0) { $('tocBox').classList.add('hidden'); return; }
+  for (const it of items) {
+    const li = document.createElement('li');
+    li.textContent = it.title || '(제목 없음)';
+    li.style.paddingLeft = `${16 + it.depth * 14}px`;
+    li.title = li.textContent;
+    li.onclick = () => it.pick();
+    ul.appendChild(li);
+  }
+  $('tocBox').classList.remove('hidden');
+}
+
+function buildToc() {
+  renderToc([]);
+  if (!state.item || state.item.format === 'txt') return;
+  if (isEpub()) {
+    loadEpubToc(state.item.local ? state.item.bytes || null : `/local/file?name=${encodeURIComponent(state.item.name)}`)
+      .then((entries) => renderToc(entries.map((e) => ({
+        title: e.title,
+        depth: e.depth,
+        pick: () => { if (e.index >= 0) showChapter(e.index); },
+      }))))
+      .catch(() => renderToc([]));
+    return;
+  }
+  const view = state.views.orig;
+  if (!view || !view.pdf) return;
+  view.pdf.getOutline().then((outline) => {
+    if (!outline) return renderToc([]);
+    const flat = [];
+    const walk = (list, depth) => {
+      for (const node of list) {
+        flat.push({ title: node.title, depth, pick: () => goToPdfDest(view, node.dest) });
+        if (node.items && node.items.length) walk(node.items, depth + 1);
+      }
+    };
+    walk(outline, 0);
+    renderToc(flat);
+  }).catch(() => renderToc([]));
+}
+
+// EPUB 목차: nav 문서(EPUB3)를 우선 읽고, 없으면 toc.ncx(EPUB2)를 읽는다.
+async function loadEpubToc(src) {
+  if (!src) return [];
+  const buf = typeof src === 'string' ? await (await fetch(src)).arrayBuffer() : src.slice(0);
+  const zip = await JSZip.loadAsync(buf);
+  const parse = (xml, type) => new DOMParser().parseFromString(xml, type);
+  const container = parse(await zip.file('META-INF/container.xml').async('string'), 'application/xml');
+  const opfPath = container.getElementsByTagName('rootfile')[0].getAttribute('full-path');
+  const opf = parse(await zip.file(opfPath).async('string'), 'application/xml');
+  const base = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
+
+  const manifest = {};
+  let navHref = null;
+  let ncxHref = null;
+  for (const item of opf.getElementsByTagName('item')) {
+    const id = item.getAttribute('id');
+    const href = decodeURIComponent(item.getAttribute('href'));
+    manifest[id] = href;
+    if ((item.getAttribute('properties') || '').split(/\s+/).includes('nav')) navHref = href;
+    if (item.getAttribute('media-type') === 'application/x-dtbncx+xml') ncxHref = href;
+  }
+  // 장 순서(spine)를 전체 경로 목록으로 만든다
+  const spine = [];
+  for (const ref of opf.getElementsByTagName('itemref')) {
+    const href = manifest[ref.getAttribute('idref')];
+    if (href) spine.push(joinPath(base, href));
+  }
+
+  const entries = [];
+  const indexOf = (docPath, rel) => {
+    const target = joinPath(docPath.slice(0, docPath.lastIndexOf('/') + 1), decodeURIComponent(rel.split('#')[0]));
+    return spine.indexOf(target);
+  };
+
+  if (navHref) {
+    const navPath = joinPath(base, navHref);
+    const doc = parse(await zip.file(navPath).async('string'), 'text/html');
+    const nav = [...doc.querySelectorAll('nav')].find((n) => /toc/.test(n.getAttribute('epub:type') || n.getAttribute('type') || '')) || doc.querySelector('nav');
+    if (nav) {
+      for (const a of nav.querySelectorAll('a[href]')) {
+        entries.push({ title: a.textContent.trim(), depth: countOl(a), index: indexOf(navPath, a.getAttribute('href')) });
+      }
+    }
+  } else if (ncxHref) {
+    const ncxPath = joinPath(base, ncxHref);
+    const ncx = parse(await zip.file(ncxPath).async('string'), 'application/xml');
+    for (const point of ncx.getElementsByTagName('navPoint')) {
+      const label = point.getElementsByTagName('text')[0];
+      const content = point.getElementsByTagName('content')[0];
+      if (!label || !content) continue;
+      entries.push({ title: label.textContent.trim(), depth: countNavPoint(point), index: indexOf(ncxPath, content.getAttribute('src')) });
+    }
+  }
+  return entries;
+}
+
+// nav 안에서 이 링크가 몇 겹 중첩됐는지(목차 들여쓰기 단계)
+function countOl(a) {
+  let depth = -1;
+  for (let el = a; el; el = el.parentElement) if (el.tagName === 'OL') depth++;
+  return Math.max(0, depth);
+}
+
+function countNavPoint(point) {
+  let depth = 0;
+  for (let el = point.parentElement; el; el = el.parentElement) if (el.tagName === 'navPoint') depth++;
+  return depth;
+}
+
 // ---------------- 공통 열기
 
 // 서버 파일이면 URL, 브라우저에서 고른 파일이면 ArrayBuffer를 돌려준다.
@@ -472,6 +654,7 @@ async function openOriginal() {
   try {
     const src = await srcOf(state.item);
     if (isEpub()) await openEpub('orig', src, 'paneOrig');
+    else if (state.item.format === 'txt') await openText('orig', src, 'paneOrig');
     else await openPdf('orig', src, 'paneOrig');
   } catch (e) {
     showMessage('paneOrig', `원본을 열 수 없습니다: ${e.message}`);
@@ -722,6 +905,16 @@ async function startBrowserView() {
   state.browser.token++;
 
   const src = await srcOf(state.item);
+  if (state.item.format === 'txt') {
+    // 텍스트: 빈 줄로 나뉜 문단을 차례로 번역한다
+    const text = await textOf(src);
+    const paras = text.split(/\n\s*\n/).map((s) => s.replace(/\s+/g, ' ').trim()).filter(hasLetter);
+    const token = ++state.browser.token;
+    state.views.trans = { kind: 'browser', content, count: 1, shown: 0 };
+    await fillParagraphs(content, paras, token);
+    setStatus('번역 (브라우저 내장)');
+    return;
+  }
   if (isEpub()) {
     if (!state.browser.epub || state.browser.epub.name !== state.item.name) {
       setStatus('EPUB 장 목록 읽는 중...');

@@ -193,7 +193,7 @@ def alignments(doc_id: str, lang: str = "ko"):
 # 지정한 폴더(기본 D:\downloads) 바로 아래의 파일만 다룬다. 하위 폴더와 경로 이동은 허용하지 않는다.
 
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
-LIBRARY_FORMATS = {".epub", ".pdf"}
+LIBRARY_FORMATS = {".epub", ".pdf", ".txt"}  # .txt는 보기만 지원한다(번역은 아직 없음)
 
 
 SETTINGS_FILE = DATA_DIR / "settings.json"
@@ -286,13 +286,19 @@ def local_files():
 @app.get("/local/file")
 def local_file(name: str):
     path = _library_file(name)
-    media = "application/epub+zip" if path.suffix.lower() == ".epub" else "application/pdf"
+    media = {
+        ".epub": "application/epub+zip",
+        ".pdf": "application/pdf",
+        ".txt": "text/plain; charset=utf-8",
+    }[path.suffix.lower()]
     return FileResponse(path, media_type=media)
 
 
 @app.post("/local/translate", status_code=202)
 def translate_local(body: LocalTranslateRequest, tasks: BackgroundTasks):
     path = _library_file(body.name)
+    if path.suffix.lower() == ".txt":
+        raise HTTPException(400, "텍스트 파일은 번역 서버를 쓰지 않고 브라우저 번역만 지원합니다")
     _check_lang(body.target_lang, path.suffix.lower())
     if not os.environ.get("GEMINI_API_KEY"):
         raise HTTPException(503, "GEMINI_API_KEY가 설정되지 않았습니다")

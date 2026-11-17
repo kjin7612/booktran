@@ -26,7 +26,7 @@ def library(tmp_path, monkeypatch):
 def test_lists_only_epub_and_pdf_files(library):
     client = TestClient(api.app)
     names = [f["name"] for f in client.get("/local/files").json()]
-    assert names == ["paper.pdf", "sample.epub"]
+    assert names == ["notes.txt", "paper.pdf", "sample.epub"]
 
 
 def test_library_folder_can_be_changed(library, tmp_path, monkeypatch):
@@ -63,7 +63,9 @@ def test_serves_library_file_and_refuses_path_escape(library):
     assert res.status_code == 200
     assert res.content.startswith(b"PK")
     assert client.get("/local/file", params={"name": "../secret.epub"}).status_code == 400
-    assert client.get("/local/file", params={"name": "notes.txt"}).status_code == 404
+    txt = client.get("/local/file", params={"name": "notes.txt"})
+    assert txt.status_code == 200 and txt.text == "ignored"
+    assert client.get("/local/file", params={"name": "other.exe"}).status_code == 404
 
 
 def test_translate_library_pdf_end_to_end(library):
