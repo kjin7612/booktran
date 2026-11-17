@@ -33,6 +33,10 @@
   #splitter { flex: none; height: 6px; cursor: ns-resize; background: var(--line); touch-action: none; }
   #splitter:hover { background: var(--accent); }
   aside.no-files #tocBox { flex: 1 1 0; }
+  #tocBox .tocHead { cursor: pointer; user-select: none; }
+  /* 목차를 접으면 머리글만 남고, 파일 목록이 나머지 공간을 쓴다 */
+  aside.toc-collapsed #tocBox { flex: none; min-height: 0; overflow: visible; }
+  aside.toc-collapsed #toc, aside.toc-collapsed #splitter { display: none; }
   aside.no-files #splitter { display: none; }
   #tocBox .tocHead { font-size: 13px; font-weight: 600; padding: 8px 16px 4px; color: var(--muted); }
   #toc { list-style: none; margin: 0; padding: 0 0 8px; }
@@ -93,7 +97,7 @@
     </div>
   </div>
   <div id="tocBox" class="hidden">
-    <div class="tocHead">목차</div>
+    <div class="tocHead" id="tocToggle" role="button" tabindex="0" title="목차 접기/펴기">▾ 목차</div>
     <ul id="toc"></ul>
   </div>
   <div id="splitter" class="hidden" title="드래그해서 목차와 파일 목록의 크기 조절"></div>
@@ -1139,6 +1143,15 @@ $('folderBtn').onclick = async () => {
   }
 };
 $('folderInput').onkeydown = (e) => { if (e.key === 'Enter') $('folderBtn').click(); };
+
+// 목차 접기/펴기
+function toggleToc() {
+  const collapsed = !document.querySelector('aside').classList.contains('toc-collapsed');
+  document.querySelector('aside').classList.toggle('toc-collapsed', collapsed);
+  $('tocToggle').textContent = `${collapsed ? '▸' : '▾'} 목차`;
+}
+$('tocToggle').onclick = toggleToc;
+$('tocToggle').onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleToc(); } };
 
 // 목차 높이 조절 손잡이. 드래그한 높이는 브라우저에 저장해 다음에도 같은 크기로 연다.
 (function setupSplitter() {
