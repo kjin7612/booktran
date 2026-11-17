@@ -387,6 +387,7 @@ async function selectFile(item, li) {
   document.querySelectorAll('#files li').forEach((el) => el.classList.remove('active'));
   li.classList.add('active');
   stopPolling();
+  savePos(); // 바꾸기 전에 지금 책의 위치를 저장한다
   clearViews();
   state.item = item;
   state.chapter = 0;
@@ -411,7 +412,7 @@ async function selectFile(item, li) {
   if (item.translated) await openTranslated();
   else showMessage('paneTrans', '아직 번역되지 않았습니다.');
   applyMode();
-  resetPaneScroll();
+  restorePos(item); // 이 책을 읽던 위치로 돌아간다(없으면 맨 위)
 }
 
 function showMessage(paneId, text) {
@@ -769,6 +770,62 @@ for (const key of ['orig', 'trans']) {
 $('colorReset').onclick = () => {
   for (const key of ['orig', 'trans']) applyPaneColors(key, PANE_DEFAULTS[key].fg, PANE_DEFAULTS[key].bg);
 };
+
+// ---------------- 읽던 위치 기억 (책마다 따로 저장, 브라우저에 보관)
+// 저장하는 것: EPUB은 장 번호, 모든 형식은 원본 창의 스크롤 비율.
+
+const POS_KEY = 'readPos';
+
+function readPositions() {
+  try { return JSON.parse(localStorage.getItem(POS_KEY) || '{}'); } catch (_) { return {}; }
+}
+
+function posKey(item) {
+  return `${item.format}|${item.name}|${item.size}`;
+}
+
+function origContent() {
+  return $('paneOrig').querySelector('.content');
+}
+
+function savePos() {
+  const item = state.item;
+  const c = item && origContent();
+  if (!c) return;
+  const range = c.scrollHeight - c.clientHeight;
+  const all = readPositions();
+  all[posKey(item)] = {
+    chapter: item.format === 'epub' ? state.chapter : 0,
+    ratio: range > 0 ? c.scrollTop / range : 0,
+    t: Date.now(),
+  };
+  try { localStorage.setItem(POS_KEY, JSON.stringify(all)); } catch (_) {}
+}
+
+function restorePos(item) {
+  const pos = readPositions()[posKey(item)];
+  if (!pos) { resetPaneScroll(); return; }
+  if (item.format === 'epub') {
+    state.chapter = pos.chapter || 0;
+    showChapter(state.chapter);
+  }
+  // 레이아웃이 잡힌 뒤에 스크롤 위치를 맞춘다
+  setTimeout(() => {
+    const c = origContent();
+    const range = c.scrollHeight - c.clientHeight;
+    c.scrollTop = range > 0 ? pos.ratio * range : 0;
+  }, 400);
+}
+
+function attachPosSave() {
+  let timer = null;
+  origContent().addEventListener('scroll', () => {
+    clearTimeout(timer);
+    timer = setTimeout(savePos, 500);
+  }, { passive: true });
+  window.addEventListener('pagehide', savePos);
+}
+attachPosSave();
 
 // 파일을 열면 두 창 모두 맨 위에서 시작한다(이전 파일의 스크롤 위치를 이어받지 않게)
 function resetPaneScroll() {
