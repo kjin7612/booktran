@@ -46,6 +46,17 @@ def test_library_folder_can_be_changed(library, tmp_path, monkeypatch):
     assert bad.status_code == 400
 
 
+def test_target_language_is_checked(library):
+    client = TestClient(api.app)
+    # 목록에 없는 언어는 거부한다(파일 이름에 들어가는 값이므로)
+    assert client.post("/local/translate", json={"name": "sample.epub", "target_lang": "../x"}).status_code == 400
+    # PDF는 글꼴 제약 때문에 일본어를 거부한다
+    assert client.post("/local/translate", json={"name": "paper.pdf", "target_lang": "ja"}).status_code == 400
+    # EPUB은 일본어도 받는다
+    started = client.post("/local/translate", json={"name": "sample.epub", "target_lang": "ja"})
+    assert started.status_code == 202
+
+
 def test_serves_library_file_and_refuses_path_escape(library):
     client = TestClient(api.app)
     res = client.get("/local/file", params={"name": "sample.epub"})

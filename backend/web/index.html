@@ -81,12 +81,21 @@
     <button id="translateBtn" class="primary hidden">번역 시작</button>
     <button id="browserBtn" class="hidden" title="API 키 없이 브라우저 내장 번역(Chrome 138 이상)을 사용합니다">브라우저 번역 (키 불필요)</button>
     <select id="srcLang" class="hidden" title="원문 언어">
-      <option value="en">영어 → 한국어</option>
-      <option value="ja">일본어 → 한국어</option>
-      <option value="zh">중국어 → 한국어</option>
-      <option value="fr">프랑스어 → 한국어</option>
-      <option value="de">독일어 → 한국어</option>
-      <option value="es">스페인어 → 한국어</option>
+      <option value="en">원문: 영어</option>
+      <option value="ja">원문: 일본어</option>
+      <option value="zh">원문: 중국어</option>
+      <option value="fr">원문: 프랑스어</option>
+      <option value="de">원문: 독일어</option>
+      <option value="es">원문: 스페인어</option>
+    </select>
+    <select id="tgtLang" class="hidden" title="번역 도착 언어">
+      <option value="ko">번역: 한국어</option>
+      <option value="en">번역: 영어</option>
+      <option value="ja">번역: 일본어</option>
+      <option value="zh">번역: 중국어</option>
+      <option value="fr">번역: 프랑스어</option>
+      <option value="de">번역: 독일어</option>
+      <option value="es">번역: 스페인어</option>
     </select>
     <span id="status"></span>
     <div class="group hidden" id="modes">
@@ -241,6 +250,7 @@ async function selectFile(item, li) {
   $('browserBtn').classList.remove('hidden');
   $('browserBtn').disabled = false;
   $('srcLang').classList.remove('hidden');
+  $('tgtLang').classList.remove('hidden');
   $('modes').classList.remove('hidden');
   // 장 이동은 EPUB 전용. PDF는 스크롤로 넘긴다.
   $('nav').classList.toggle('hidden', !isEpub());
@@ -353,7 +363,7 @@ async function openOriginal() {
 
 async function openTranslated() {
   try {
-    const url = `/documents/${state.item.doc_id}/translated?lang=ko`;
+    const url = `/documents/${state.item.doc_id}/translated?lang=${$('tgtLang').value}`;
     if (isEpub()) await openEpub('trans', url, 'paneTrans');
     else await openPdf('trans', url, 'paneTrans');
   } catch (e) {
@@ -387,16 +397,20 @@ function showChapter(index) {
 state.transMode = 'server';   // 'server' | 'browser'
 state.browser = { translator: null, lang: null, cache: new Map(), epub: null, token: 0 };
 
-async function getTranslator(sourceLanguage) {
+async function getTranslator(sourceLanguage, targetLanguage) {
   if (typeof window.Translator === 'undefined') {
     throw new Error('이 브라우저에는 내장 번역 API가 없습니다. Chrome 138 이상에서 열어 주세요.');
   }
-  const opts = { sourceLanguage, targetLanguage: 'ko' };
+  if (sourceLanguage === targetLanguage) {
+    throw new Error('원문 언어와 번역 언어가 같습니다. 번역 언어를 바꿔 주세요.');
+  }
+  const opts = { sourceLanguage, targetLanguage };
   const availability = await Translator.availability(opts);
   if (availability === 'unavailable') {
-    throw new Error(`${sourceLanguage} → ko 번역을 이 브라우저에서 쓸 수 없습니다.`);
+    throw new Error(`${sourceLanguage} → ${targetLanguage} 번역을 이 브라우저에서 쓸 수 없습니다.`);
   }
-  if (state.browser.translator && state.browser.lang === sourceLanguage) return state.browser.translator;
+  const pair = `${sourceLanguage}>${targetLanguage}`;
+  if (state.browser.translator && state.browser.lang === pair) return state.browser.translator;
   setStatus(availability === 'available' ? '번역기 준비 중...' : '번역 모델 내려받는 중...');
   const translator = await Translator.create({
     ...opts,
@@ -405,7 +419,7 @@ async function getTranslator(sourceLanguage) {
     },
   });
   state.browser.translator = translator;
-  state.browser.lang = sourceLanguage;
+  state.browser.lang = pair;
   return translator;
 }
 
@@ -582,7 +596,7 @@ async function fillBrowserPdfPage(view, index) {
 
 async function startBrowserView() {
   const srcLang = $('srcLang').value;
-  await getTranslator(srcLang);
+  await getTranslator(srcLang, $('tgtLang').value);
 
   dropView('trans');
   const content = $('paneTrans').querySelector('.content');
@@ -710,7 +724,7 @@ $('translateBtn').onclick = async () => {
     const { job_id } = await api('/local/translate', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: state.item.name, target_lang: 'ko' }),
+      body: JSON.stringify({ name: state.item.name, target_lang: $('tgtLang').value }),
     });
     state.pollTimer = setInterval(() => pollJob(job_id), 2000);
     pollJob(job_id);

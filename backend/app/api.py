@@ -40,6 +40,19 @@ _jobs_lock = Lock()
 app = FastAPI(title="Book_Tran API", version="0.1.0")
 
 
+# 번역 도착 언어. 파일 이름과 캐시 키에 들어가므로 목록에 있는 코드만 받는다.
+SUPPORTED_LANGS = {"ko": "한국어", "en": "영어", "ja": "일본어", "zh": "중국어", "fr": "프랑스어", "de": "독일어", "es": "스페인어"}
+# 번역 PDF는 맑은 고딕(한국어 글꼴) 하나로 글자를 쓰므로, 그 글꼴이 덮는 언어만 허용한다.
+PDF_LANGS = {"ko", "en", "fr", "de", "es"}
+
+
+def _check_lang(lang: str, suffix: str) -> None:
+    if lang not in SUPPORTED_LANGS:
+        raise HTTPException(400, f"지원하지 않는 언어입니다: {lang}")
+    if suffix == ".pdf" and lang not in PDF_LANGS:
+        raise HTTPException(400, "PDF 번역은 한국어·영어·프랑스어·독일어·스페인어만 지원합니다(글꼴 제약). EPUB은 모든 언어를 지원합니다.")
+
+
 class TranslateRequest(BaseModel):
     target_lang: str = "ko"
 
@@ -132,7 +145,7 @@ def _run_translation(job_id: str, doc_id: str, target_lang: str) -> None:
 
 @app.post("/documents/{doc_id}/translate", status_code=202)
 def start_translation(doc_id: str, body: TranslateRequest, tasks: BackgroundTasks):
-    _doc_path(doc_id)
+    _check_lang(body.target_lang, _doc_path(doc_id).suffix)
     if not os.environ.get("GEMINI_API_KEY"):
         raise HTTPException(503, "GEMINI_API_KEY가 설정되지 않았습니다")
     job_id = uuid.uuid4().hex
@@ -159,7 +172,7 @@ def original(doc_id: str):
 
 @app.get("/documents/{doc_id}/translated")
 def translated(doc_id: str, lang: str = "ko"):
-    _doc_path(doc_id)
+    _check_lang(lang, _doc_path(doc_id).suffix)
     path = _translated_path(doc_id, lang)
     if path is None:
         raise HTTPException(404, "번역 결과가 없습니다")
@@ -168,7 +181,7 @@ def translated(doc_id: str, lang: str = "ko"):
 
 @app.get("/documents/{doc_id}/alignments")
 def alignments(doc_id: str, lang: str = "ko"):
-    _doc_path(doc_id)
+    _check_lang(lang, _doc_path(doc_id).suffix)
     path = _out_path(doc_id, f"{lang}.alignments.json")
     if not path.exists():
         raise HTTPException(404, "대응표가 없습니다")
@@ -280,6 +293,7 @@ def local_file(name: str):
 @app.post("/local/translate", status_code=202)
 def translate_local(body: LocalTranslateRequest, tasks: BackgroundTasks):
     path = _library_file(body.name)
+    _check_lang(body.target_lang, path.suffix.lower())
     if not os.environ.get("GEMINI_API_KEY"):
         raise HTTPException(503, "GEMINI_API_KEY가 설정되지 않았습니다")
 
